@@ -1,0 +1,43 @@
+# PRD: Pulse (The Abyssal Portfolio Terminal)
+
+## 1. Project Overview
+**Pulse** is a high-performance, single-user wealth management terminal. It is the evolution of 'Blink Pulse', migrating from a Google Sheets/GAS backend to a modern, edge-ready stack (Next.js/Turso/Vercel) to achieve sub-second latency and absolute data integrity.
+
+## 2. Core Objectives
+- **Zero-Cost Operation**: Leverage Free Tiers of Turso, Vercel, and Alpha Vantage.
+- **Data Integrity**: Move from flat-file storage to a relational SQL database.
+- **Professional Analytics**: Implement pure ROI tracking (Market vs. Net Invested).
+- **Security**: 4-digit PIN authentication for private access.
+
+## 3. User Flows
+### 3.1 Authentication
+- User lands on a minimalist login screen.
+- Enter a 4-digit PIN via a custom Glassmorphic Num Pad.
+- On success, a secure session is established.
+
+### 3.2 Portfolio Overview (Performance)
+- View a central **Hero Graph** showing ROI percentage over time (Time-weighted return).
+- **Net Worth Summary**: Total value in USD/ILS with a currency toggle button.
+- **Equation Subtext**: Breakdown of Capital Profit vs. DRIP.
+
+### 3.3 Assets & Allocation (Composition)
+- **Growth Drivers**: Double-doughnut charts (Sectors & Engines).
+- **Regional Split**: Horizontal bar chart for geographic exposure.
+- **High-Density Table**: List of holdings with expandable details.
+
+### 3.4 Trade & History
+- **Trade**: Input form for BUY/SELL/DRIP transactions.
+- **History**: Searchable/filterable ledger of all historical activity.
+
+### 3.5 Simulation (Optimizer)
+- **Smart Deposit**: Calculate the ideal distribution of a new deposit based on target percentages.
+
+## 4. Functional Requirements
+- **Currency Lens**: Real-time conversion using a stored exchange rate from the last market update.
+- **Golden Formula**: Recalculate ILS Cost Basis based on transaction-date exchange rates.
+- **Market Data Sync**: Automate 4 daily pulls from Alpha Vantage (16:30, 18:40, 20:50, 23:00 IST).
+
+## 5. Data Model (Turso/SQLite)
+- `transactions`: ID, Date, Ticker, Action, Qty, Price, Fees, Historic_Rate.
+- `assets`: Ticker, Name, Region, Sector, Current_Price, Target_Pct, Div_Yield.
+- `snapshots`: Date, Total_Value, Net_Invested.
