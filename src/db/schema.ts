@@ -1,4 +1,4 @@
-import { sqliteTable, text, real, integer } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, real, numeric } from "drizzle-orm/sqlite-core";
 
 export const assets = sqliteTable("assets", {
   ticker: text("ticker").primaryKey(),
@@ -9,7 +9,7 @@ export const assets = sqliteTable("assets", {
   current_price: real("current_price"),
   target_pct: real("target_pct"),
   div_yield: real("div_yield"),
-  updated_at: integer("updated_at", { mode: "timestamp" }),
+  updated_at: numeric("updated_at"),
 });
 
 export const transactions = sqliteTable("transactions", {
@@ -23,7 +23,7 @@ export const transactions = sqliteTable("transactions", {
   total_amount: real("total_amount"),
   historic_rate: real("historic_rate"),
   realized_pl: real("realized_pl"),
-  created_at: integer("created_at", { mode: "timestamp" }),
+  created_at: numeric("created_at"),
 });
 
 export const snapshots = sqliteTable("snapshots", {

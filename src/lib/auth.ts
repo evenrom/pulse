@@ -1,3 +1,5 @@
+import bcrypt from "bcryptjs";
+
 export function validatePin(pin: string): boolean {
   if (!pin) {
     throw new Error("PIN is required for validation.");
@@ -18,5 +20,5 @@ export function validatePin(pin: string): boolean {
     throw new Error("APP_PIN_CODE environment variable is missing.");
   }
 
-  return pin === appPinCode;
+  return bcrypt.compareSync(pin, appPinCode);
 }
