@@ -3,7 +3,7 @@ import { assets, transactions, snapshots } from "@/db/schema";
 import { calculateNetInvested } from "@/lib/finance";
 import { sql } from "drizzle-orm";
 
-const LEGACY_API_URL = "https://script.google.com/macros/s/AKfycbxHpb8GbPx8rtpvndKhT420Rt1GZ_zoL26gjzlY45U6/exec?sheetId=1FdujyLqgYcKgaCPVzUsU7LYGBrVTJcvVEQd310_bWAQ&scriptId=1rlvPktMB6ZbCcrGmxow6ugYuyYnBBSnFMTqETI9Z8rZYOcIEWbXGDtVw&action=getPortfolio";
+const LEGACY_API_URL = "https://script.google.com/macros/s/AKfycbwciilArcEvpTLRDE3NjCVSWopoAcjjkfc792ljbHs765nmHYy6dHDyW-dZnfUJitvO/exec?sheetId=1FdujyLqgYcKgaCPVzUsU7LYGBrVTJcvVEQd310_bWAQ&action=getPortfolio";
 
 interface LegacyAsset {
   ticker: string;
