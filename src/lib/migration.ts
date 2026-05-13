@@ -1,38 +1,9 @@
-import { db } from "@/db";
+ import { db } from "@/db";
 import { assets, transactions, snapshots } from "@/db/schema";
-import { calculateNetInvested } from "@/lib/finance";
 import { sql } from "drizzle-orm";
 
+// HACK: Paste the newly generated Deployment URL below (Keep the ?sheetId=... parameter)
 const LEGACY_API_URL = "https://script.google.com/macros/s/AKfycbwciilArcEvpTLRDE3NjCVSWopoAcjjkfc792ljbHs765nmHYy6dHDyW-dZnfUJitvO/exec?sheetId=1FdujyLqgYcKgaCPVzUsU7LYGBrVTJcvVEQd310_bWAQ&action=getPortfolio";
-
-interface LegacyAsset {
-  ticker: string;
-  name: string;
-  region: string;
-  sector: string;
-  asset_class: string;
-  current_price: number;
-  target_pct: number;
-  div_yield: number;
-}
-
-interface LegacyTransaction {
-  id: string;
-  date: string;
-  ticker: string;
-  action: "BUY" | "SELL" | "DRIP";
-  quantity: number;
-  price: number;
-  fees: number;
-  total_amount: number;
-  historic_rate: number;
-  realized_pl: number;
-}
-
-interface LegacyPortfolioResponse {
-  assets: LegacyAsset[];
-  transactions: LegacyTransaction[];
-}
 
 export async function migratePortfolio() {
   try {
@@ -40,135 +11,127 @@ export async function migratePortfolio() {
     const response = await fetch(LEGACY_API_URL);
 
     if (!response.ok) {
-      throw new Error(`API fetch error: ${response.status} ${response.statusText}`);
+      throw new Error(`API fetch error: ${response.status}`);
     }
 
-    const dataText = await response.text();
-    let data: LegacyPortfolioResponse;
-    try {
-      data = JSON.parse(dataText);
-    } catch {
-      // Sometimes it might return an HTML page or unexpected data if there's an error.
-      console.error("Failed to parse JSON response:", dataText.substring(0, 200));
-      throw new Error("Failed to parse legacy API response as JSON.");
+    const payload = await response.json();
+
+    if (payload.status !== 'success' || !payload.data || !payload.transactions) {
+      throw new Error("Invalid data format. Did you update Code.gs and use the NEW deployment URL?");
     }
 
-    if (!data || !data.assets || !data.transactions) {
-      throw new Error("Invalid data format received from API.");
-    }
+    const currentTimestamp: any = new Date().toISOString(); 
 
-    const currentTimestamp = new Date().toISOString();
-
-    console.log(`Received ${data.assets.length} assets and ${data.transactions.length} transactions.`);
+    console.log(`Received ${payload.data.length} assets and ${payload.transactions.length} transactions.`);
 
     // 1. Insert Assets
-    try {
-      if (data.assets.length > 0) {
-        await db.insert(assets).values(
-          data.assets.map(a => ({
-            ticker: a.ticker,
-            name: a.name,
-            region: a.region,
-            sector: a.sector,
-            asset_class: a.asset_class,
-            current_price: a.current_price,
-            target_pct: a.target_pct,
-            div_yield: a.div_yield,
-            updated_at: currentTimestamp,
-          }))
-        ).onConflictDoUpdate({
-          target: assets.ticker,
-          set: {
-            name: sql`excluded.name`,
-            region: sql`excluded.region`,
-            sector: sql`excluded.sector`,
-            asset_class: sql`excluded.asset_class`,
-            current_price: sql`excluded.current_price`,
-            target_pct: sql`excluded.target_pct`,
-            div_yield: sql`excluded.div_yield`,
-            updated_at: currentTimestamp,
-          }
-        });
-        console.log("Assets migrated successfully.");
-      }
-    } catch (e) {
-      console.error("DB insertion error (assets):", e);
-      throw e;
+    if (payload.data.length > 0) {
+      await db.insert(assets).values(
+        payload.data.map((a: any) => ({
+          ticker: String(a.Ticker),
+          name: String(a.Name || ''),
+          region: String(a.Region || 'Global'),
+          sector: String(a.Sector || 'General'),
+          asset_class: String(a.Asset_Class || 'Equity'),
+          current_price: Number(a.Current_Price) || 0,
+          target_pct: Number(a.Target_Pct) || 0,
+          div_yield: Number(a.Div_Yield) || 0,
+          updated_at: currentTimestamp,
+        }))
+      ).onConflictDoUpdate({
+        target: assets.ticker,
+        set: {
+          name: sql`excluded.name`,
+          region: sql`excluded.region`,
+          sector: sql`excluded.sector`,
+          asset_class: sql`excluded.asset_class`,
+          current_price: sql`excluded.current_price`,
+          target_pct: sql`excluded.target_pct`,
+          div_yield: sql`excluded.div_yield`,
+          updated_at: currentTimestamp,
+        }
+      });
+      console.log("Assets migrated successfully.");
     }
 
     // 2. Insert Transactions
-    try {
-      if (data.transactions.length > 0) {
-        await db.insert(transactions).values(
-          data.transactions.map(t => ({
-            id: t.id,
-            date: t.date,
-            ticker: t.ticker,
-            action: t.action,
-            quantity: t.quantity,
-            price: t.price,
-            fees: t.fees,
-            total_amount: t.total_amount,
-            historic_rate: t.historic_rate,
-            realized_pl: t.realized_pl,
+    if (payload.transactions.length > 0) {
+      await db.insert(transactions).values(
+        payload.transactions.map((t: any) => {
+          let dateStr = new Date().toISOString();
+          try { if (t.Date) dateStr = new Date(t.Date).toISOString(); } catch(e){}
+
+          return {
+            id: String(t.ID || Math.random()),
+            date: dateStr,
+            ticker: String(t.Ticker || 'UNKNOWN'),
+            action: (t.Action === 'BUY' || t.Action === 'SELL' || t.Action === 'DRIP') ? t.Action : 'BUY',
+            quantity: Number(t.Quantity) || 0,
+            price: Number(t.Price) || 0,
+            fees: Number(t.Fees) || 0,
+            total_amount: Number(t.Total_Amount) || 0,
+            historic_rate: Number(t.USD_ILS_Rate) || 3.7,
+            realized_pl: Number(t.Realized_PL) || 0,
             created_at: currentTimestamp,
-          }))
-        ).onConflictDoUpdate({
-          target: transactions.id,
-          set: {
-            date: sql`excluded.date`,
-            ticker: sql`excluded.ticker`,
-            action: sql`excluded.action`,
-            quantity: sql`excluded.quantity`,
-            price: sql`excluded.price`,
-            fees: sql`excluded.fees`,
-            total_amount: sql`excluded.total_amount`,
-            historic_rate: sql`excluded.historic_rate`,
-            realized_pl: sql`excluded.realized_pl`,
-          }
-        });
-        console.log("Transactions migrated successfully.");
-      }
-    } catch (e) {
-      console.error("DB insertion error (transactions):", e);
-      throw e;
+          };
+        })
+      ).onConflictDoUpdate({
+        target: transactions.id,
+        set: {
+          date: sql`excluded.date`,
+          ticker: sql`excluded.ticker`,
+          action: sql`excluded.action`,
+          quantity: sql`excluded.quantity`,
+          price: sql`excluded.price`,
+          fees: sql`excluded.fees`,
+          total_amount: sql`excluded.total_amount`,
+          historic_rate: sql`excluded.historic_rate`,
+          realized_pl: sql`excluded.realized_pl`,
+        }
+      });
+      console.log("Transactions migrated successfully.");
     }
 
-    // 3. Reconstruct Snapshots
-    try {
-      console.log("Reconstructing snapshots...");
-      // Sort transactions by date
-      const sortedTxs = [...data.transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    // 3. Reconstruct Snapshots (Golden Formula Implementation)
+    console.log("Reconstructing snapshots...");
+    const sortedTxs = [...payload.transactions].sort((a, b) => new Date(a.Date).getTime() - new Date(b.Date).getTime());
+    const dates = Array.from(new Set(sortedTxs.map(t => {
+        try { return new Date(t.Date).toISOString().split("T")[0]; }
+        catch(e) { return "1970-01-01"; }
+    })));
 
-      const dates = Array.from(new Set(sortedTxs.map(t => t.date.split("T")[0])));
-
-      const snapshotValues = [];
-      for (const date of dates) {
-        // Find all txs up to and including this date
-        // We'll just filter them simply
-        const txsOnOrBeforeDate = sortedTxs.filter(t => t.date.split("T")[0] <= date);
-        const netInvested = calculateNetInvested(txsOnOrBeforeDate as unknown as import("@/lib/finance").Transaction[]);
+    const snapshotValues = [];
+    for (const date of dates) {
+        const txsOnOrBeforeDate = sortedTxs.filter(t => {
+           try { return new Date(t.Date).toISOString().split("T")[0] <= date; }
+           catch(e) { return false; }
+        });
+        
+        let currentCost = 0;
+        let realizedGains = 0;
+        for (const tx of txsOnOrBeforeDate) {
+            if (tx.Action === "BUY" || tx.Action === "DRIP") {
+                currentCost += (Number(tx.Total_Amount) || 0);
+            } else if (tx.Action === "SELL") {
+                currentCost -= (Number(tx.Total_Amount) || 0);
+            }
+            realizedGains += (Number(tx.Realized_PL) || 0);
+        }
+        const netInvested = currentCost - realizedGains;
 
         snapshotValues.push({
-          date,
-          total_value: 0, // We don't have historical total_value easily without historical prices, might leave as 0 or calculate if possible
-          net_invested: netInvested,
+            date,
+            total_value: 0,
+            net_invested: netInvested,
         });
-      }
+    }
 
-      if (snapshotValues.length > 0) {
+    if (snapshotValues.length > 0) {
         await db.insert(snapshots).values(snapshotValues).onConflictDoUpdate({
-          target: snapshots.date,
-          set: {
-            net_invested: sql`excluded.net_invested`,
-            // Total value should be calculated from historical prices, which we might not have, so keeping existing or 0
-          }
+            target: snapshots.date,
+            set: { net_invested: sql`excluded.net_invested` }
         });
         console.log(`Reconstructed ${snapshotValues.length} snapshots successfully.`);
-      }
-    } catch (e) {
-      console.error("DB insertion error (snapshots):", e);
-      throw e;
     }
 
     return { success: true, message: "Migration completed successfully." };
@@ -178,7 +141,6 @@ export async function migratePortfolio() {
   }
 }
 
-// Execute the migration
 migratePortfolio().then(res => {
   console.log("Migration Result:", res);
   process.exit(0);
