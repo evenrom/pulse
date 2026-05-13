@@ -57,7 +57,7 @@ export async function migratePortfolio() {
       throw new Error("Invalid data format received from API.");
     }
 
-    const currentTimestamp = new Date();
+    const currentTimestamp = new Date().toISOString();
 
     console.log(`Received ${data.assets.length} assets and ${data.transactions.length} transactions.`);
 
@@ -66,7 +66,14 @@ export async function migratePortfolio() {
       if (data.assets.length > 0) {
         await db.insert(assets).values(
           data.assets.map(a => ({
-            ...a,
+            ticker: a.ticker,
+            name: a.name,
+            region: a.region,
+            sector: a.sector,
+            asset_class: a.asset_class,
+            current_price: a.current_price,
+            target_pct: a.target_pct,
+            div_yield: a.div_yield,
             updated_at: currentTimestamp,
           }))
         ).onConflictDoUpdate({
@@ -94,7 +101,16 @@ export async function migratePortfolio() {
       if (data.transactions.length > 0) {
         await db.insert(transactions).values(
           data.transactions.map(t => ({
-            ...t,
+            id: t.id,
+            date: t.date,
+            ticker: t.ticker,
+            action: t.action,
+            quantity: t.quantity,
+            price: t.price,
+            fees: t.fees,
+            total_amount: t.total_amount,
+            historic_rate: t.historic_rate,
+            realized_pl: t.realized_pl,
             created_at: currentTimestamp,
           }))
         ).onConflictDoUpdate({
@@ -161,3 +177,12 @@ export async function migratePortfolio() {
     return { success: false, error: (error as Error).message };
   }
 }
+
+// Execute the migration
+migratePortfolio().then(res => {
+  console.log("Migration Result:", res);
+  process.exit(0);
+}).catch(err => {
+  console.error("Migration Fatal Error:", err);
+  process.exit(1);
+});
