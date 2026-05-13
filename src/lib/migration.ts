@@ -20,14 +20,14 @@ export async function migratePortfolio() {
       throw new Error("Invalid data format. Did you update Code.gs and use the NEW deployment URL?");
     }
 
-    const currentTimestamp: any = new Date().toISOString(); 
+    const currentTimestamp = new Date().toISOString();
 
     console.log(`Received ${payload.data.length} assets and ${payload.transactions.length} transactions.`);
 
     // 1. Insert Assets
     if (payload.data.length > 0) {
       await db.insert(assets).values(
-        payload.data.map((a: any) => ({
+        payload.data.map((a: Record<string, unknown>) => ({
           ticker: String(a.Ticker),
           name: String(a.Name || ''),
           region: String(a.Region || 'Global'),
@@ -57,9 +57,9 @@ export async function migratePortfolio() {
     // 2. Insert Transactions
     if (payload.transactions.length > 0) {
       await db.insert(transactions).values(
-        payload.transactions.map((t: any) => {
+        payload.transactions.map((t: Record<string, unknown>) => {
           let dateStr = new Date().toISOString();
-          try { if (t.Date) dateStr = new Date(t.Date).toISOString(); } catch(e){}
+          try { if (t.Date) dateStr = new Date(t.Date as string).toISOString(); } catch{}
 
           return {
             id: String(t.ID || Math.random()),
@@ -96,15 +96,15 @@ export async function migratePortfolio() {
     console.log("Reconstructing snapshots...");
     const sortedTxs = [...payload.transactions].sort((a, b) => new Date(a.Date).getTime() - new Date(b.Date).getTime());
     const dates = Array.from(new Set(sortedTxs.map(t => {
-        try { return new Date(t.Date).toISOString().split("T")[0]; }
-        catch(e) { return "1970-01-01"; }
+        try { return new Date(t.Date as string).toISOString().split("T")[0]; }
+        catch { return "1970-01-01"; }
     })));
 
     const snapshotValues = [];
     for (const date of dates) {
         const txsOnOrBeforeDate = sortedTxs.filter(t => {
-           try { return new Date(t.Date).toISOString().split("T")[0] <= date; }
-           catch(e) { return false; }
+           try { return new Date(t.Date as string).toISOString().split("T")[0] <= date; }
+           catch { return false; }
         });
         
         let currentCost = 0;
