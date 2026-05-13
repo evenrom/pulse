@@ -1,0 +1,91 @@
+import { NextResponse } from "next/server";
+import { db } from "@/db";
+import { assets, transactions } from "@/db/schema";
+import { validatePin } from "@/lib/auth";
+import {
+  calculateNetInvested,
+  calculateHoldings,
+  calculateProfitMetrics
+} from "@/lib/finance";
+
+// Force dynamic execution for this route to prevent Next.js from prerendering it statically.
+export const dynamic = "force-dynamic";
+
+// A public API for latest exchange rates (example: fallback to 1 USD = 3.7 ILS if API fails)
+const EXCHANGE_RATE_API_URL = "https://api.exchangerate-api.com/v4/latest/USD";
+const DEFAULT_USD_ILS = 3.7;
+
+export async function GET(request: Request) {
+  try {
+    // 1. PIN Validation
+    const pin = request.headers.get("x-pin");
+    if (!pin || !validatePin(pin)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // 2. Fetch data from Turso
+    const allAssets = await db.select().from(assets);
+    const allTransactions = await db.select().from(transactions);
+
+    // 3. Calculate Exchange Rate
+    let exchangeRate = DEFAULT_USD_ILS;
+    try {
+      const exRes = await fetch(EXCHANGE_RATE_API_URL);
+      if (exRes.ok) {
+        const exData = await exRes.json();
+        if (exData && exData.rates && exData.rates.ILS) {
+          exchangeRate = exData.rates.ILS;
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to fetch live exchange rate, using default.", e);
+    }
+
+    // 4. Calculate Aggregate Metrics
+    const holdings = calculateHoldings(allTransactions);
+
+    let totalMarketValueUsd = 0;
+    const enrichedAssets = allAssets.map(asset => {
+      const quantity = holdings[asset.ticker] || 0;
+      const valueUsd = quantity * (asset.current_price || 0);
+      totalMarketValueUsd += valueUsd;
+
+      return {
+        ...asset,
+        quantity,
+        value_usd: valueUsd,
+        value_ils: valueUsd * exchangeRate,
+      };
+    });
+
+    const netInvestedUsd = calculateNetInvested(allTransactions);
+    const profitMetricsUsd = calculateProfitMetrics(allTransactions, totalMarketValueUsd, netInvestedUsd);
+
+    // 5. Apply Currency Lens (Convert USD metrics to ILS)
+    const metrics = {
+      usd: {
+        totalMarketValue: totalMarketValueUsd,
+        netInvested: netInvestedUsd,
+        capitalProfit: profitMetricsUsd.capitalProfit,
+        totalDrip: profitMetricsUsd.totalDrip,
+        netProfit: profitMetricsUsd.netProfit,
+      },
+      ils: {
+        totalMarketValue: totalMarketValueUsd * exchangeRate,
+        netInvested: netInvestedUsd * exchangeRate,
+        capitalProfit: profitMetricsUsd.capitalProfit * exchangeRate,
+        totalDrip: profitMetricsUsd.totalDrip * exchangeRate,
+        netProfit: profitMetricsUsd.netProfit * exchangeRate,
+      },
+      exchangeRate
+    };
+
+    return NextResponse.json({
+      metrics,
+      assets: enrichedAssets,
+    });
+  } catch (error) {
+    console.error("Portfolio API error:", error);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
