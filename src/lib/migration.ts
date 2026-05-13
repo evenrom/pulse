@@ -57,7 +57,7 @@ export async function migratePortfolio() {
       throw new Error("Invalid data format received from API.");
     }
 
-    const currentTimestamp = Date.now().toString();
+    const currentTimestamp = new Date();
 
     console.log(`Received ${data.assets.length} assets and ${data.transactions.length} transactions.`);
 
