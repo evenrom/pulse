@@ -9,6 +9,13 @@ export const ENGINE_MAP: Record<string, string[]> = {
   'Stability': ['Commodities', 'Cash & Equivalents']
 };
 
+export const SECTOR_TO_ENGINE: Record<string, string> = Object.entries(ENGINE_MAP).reduce((acc, [engine, sectors]) => {
+  sectors.forEach(sector => {
+    acc[sector] = engine;
+  });
+  return acc;
+}, {} as Record<string, string>);
+
 export const GEO_BREAKDOWN: Record<string, Record<string, number>> = {
   'VOO': { 'North America': 1.0 },
   'USMV': { 'North America': 1.0 },

@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from "react";
 import { Lock, RefreshCw, DollarSign, Activity, TrendingUp, AlertCircle, ArrowRight } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { PALETTE, ENGINE_MAP, GEO_BREAKDOWN, SECTOR_BREAKDOWN } from "../lib/config";
+import { PALETTE, ENGINE_MAP, SECTOR_TO_ENGINE, GEO_BREAKDOWN, SECTOR_BREAKDOWN } from "../lib/config";
 
 type Asset = {
   ticker: string;
@@ -97,13 +97,8 @@ export default function Home() {
     });
 
     Object.entries(sectorValues).forEach(([sec, val]) => {
-      let foundEngine = 'Other';
-      for (const [engine, sectors] of Object.entries(ENGINE_MAP)) {
-        if (sectors.includes(sec)) {
-          foundEngine = engine;
-          break;
-        }
-      }
+      const foundEngine = SECTOR_TO_ENGINE[sec] || 'Other';
+
       if (!engineValues[foundEngine]) engineValues[foundEngine] = 0;
       engineValues[foundEngine] += val;
 
@@ -119,14 +114,14 @@ export default function Home() {
       .map(([name, value]) => ({ name, value, pct: (value / totalSectorVal) * 100 }))
       .sort((a, b) => b.value - a.value);
 
-    const formattedSectorData: { name: string; value: number; engine: string }[] = [];
-    formattedEngineData.forEach((engine) => {
+    const formattedSectorData: { name: string; value: number; engine: string; engineIndex: number; sectorIndex: number }[] = [];
+    formattedEngineData.forEach((engine, eIndex) => {
        const secs = engineToSectors[engine.name] || {};
        Object.entries(secs)
          .filter(([, val]) => val > 0)
          .sort((a, b) => b[1] - a[1])
-         .forEach(([name, value]) => {
-           formattedSectorData.push({ name, value, engine: engine.name });
+         .forEach(([name, value], sIndex) => {
+           formattedSectorData.push({ name, value, engine: engine.name, engineIndex: eIndex, sectorIndex: sIndex });
          });
     });
 
@@ -438,14 +433,10 @@ export default function Home() {
                     stroke="none"
                   >
                     {sectorData.map((entry, index) => {
-                      const engineIndex = engineData.findIndex(e => e.name === entry.engine);
-                      const baseColor = engineIndex >= 0 ? PALETTE[engineIndex % PALETTE.length] : '#94a3b8';
+                      const baseColor = PALETTE[entry.engineIndex % PALETTE.length];
 
-                      // Calculate opacity based on position within its engine's sectors
-                      const sectorsInEngine = sectorData.filter(s => s.engine === entry.engine);
-                      const sectorIndex = sectorsInEngine.findIndex(s => s.name === entry.name);
                       // Vary opacity: 0.9, 0.7, 0.5, etc.
-                      const opacity = Math.max(0.3, 0.9 - (sectorIndex * 0.2));
+                      const opacity = Math.max(0.3, 0.9 - (entry.sectorIndex * 0.2));
 
                       return <Cell key={`sector-${index}`} fill={baseColor} fillOpacity={opacity} />;
                     })}
