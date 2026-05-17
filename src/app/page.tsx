@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Lock, RefreshCw, DollarSign, Activity, TrendingUp, AlertCircle, ArrowRight } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
@@ -65,6 +65,17 @@ export default function Home() {
       maximumFractionDigits: 0,
     }).format(value);
   };
+
+  const assetAllocationData = useMemo(() => {
+    if (!portfolioData?.assets) return [];
+    const reduced = portfolioData.assets.reduce((acc, asset) => {
+      const key = asset.sector || asset.asset_class || 'Other';
+      acc[key] = (acc[key] || 0) + (currency === "usd" ? asset.value_usd : asset.value_ils);
+      return acc;
+    }, {} as Record<string, number>);
+
+    return Object.entries(reduced).map(([name, value]) => ({ name, value }));
+  }, [portfolioData?.assets, currency]);
 
   const fetchPortfolio = async (currentPin: string) => {
     try {
@@ -335,13 +346,7 @@ export default function Home() {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={
-                    Object.entries(portfolioData.assets.reduce((acc, asset) => {
-                      const key = asset.sector || asset.asset_class || 'Other';
-                      acc[key] = (acc[key] || 0) + (currency === "usd" ? asset.value_usd : asset.value_ils);
-                      return acc;
-                    }, {} as Record<string, number>)).map(([name, value]) => ({ name, value }))
-                  }
+                  data={assetAllocationData}
                   cx="50%"
                   cy="50%"
                   innerRadius={80}
@@ -349,11 +354,7 @@ export default function Home() {
                   paddingAngle={5}
                   dataKey="value"
                 >
-                  {Object.entries(portfolioData.assets.reduce((acc, asset) => {
-                      const key = asset.sector || asset.asset_class || 'Other';
-                      acc[key] = (acc[key] || 0) + (currency === "usd" ? asset.value_usd : asset.value_ils);
-                      return acc;
-                    }, {} as Record<string, number>)).map((entry, index) => (
+                  {assetAllocationData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
@@ -458,24 +459,24 @@ export default function Home() {
       )}
 
       <nav className="fixed bottom-0 left-0 w-full h-16 bg-slate-900 border-t border-slate-800 flex items-center justify-around z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.5)]">
-        <div
+        <button
           onClick={() => setActiveTab("dashboard")}
           className={`text-sm font-medium transition-colors cursor-pointer ${activeTab === "dashboard" ? "text-blue-500" : "text-slate-400 hover:text-slate-200"}`}
         >
           Dashboard
-        </div>
-        <div
+        </button>
+        <button
           onClick={() => setActiveTab("holdings")}
           className={`text-sm font-medium transition-colors cursor-pointer ${activeTab === "holdings" ? "text-blue-500" : "text-slate-400 hover:text-slate-200"}`}
         >
           Holdings
-        </div>
-        <div
+        </button>
+        <button
           onClick={() => setActiveTab("settings")}
           className={`text-sm font-medium transition-colors cursor-pointer ${activeTab === "settings" ? "text-blue-500" : "text-slate-400 hover:text-slate-200"}`}
         >
           Settings
-        </div>
+        </button>
       </nav>
     </div>
   );

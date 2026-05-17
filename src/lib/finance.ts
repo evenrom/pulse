@@ -84,7 +84,16 @@ export function calculateProfitMetrics(txs: Transaction[], marketValue: number, 
 
   // Capital Profit = Total Market Value - Net Invested
   const capitalProfit = marketValue - netInvested;
-  const netProfit = capitalProfit;
+
+  // Net Profit = (Unrealized Gains) + (Realized Gains) + (Dividends/DRIP)
+  // Which is equivalent to Total Market Value - Net Invested + Realized Gains + Total Drip
+
+  let totalRealizedGains = 0;
+  for (const tx of txs) {
+    totalRealizedGains += tx.realized_pl || 0;
+  }
+
+  const netProfit = capitalProfit + totalRealizedGains + totalDrip;
 
   return {
     capitalProfit,
