@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Lock, RefreshCw, DollarSign, Activity, TrendingUp, AlertCircle, ArrowRight } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 type Asset = {
   ticker: string;
@@ -10,6 +11,19 @@ type Asset = {
   current_price: number;
   value_usd: number;
   value_ils: number;
+  sector?: string;
+  asset_class?: string;
+  capital_profit_usd: number;
+  capital_profit_ils: number;
+  total_profit_pct: number;
+  drip_usd: number;
+  drip_ils: number;
+};
+
+type Snapshot = {
+  date: string;
+  total_value: number;
+  net_invested: number;
 };
 
 type Metrics = {
@@ -27,7 +41,10 @@ type PortfolioData = {
     exchangeRate: number;
   };
   assets: Asset[];
+  snapshots: Snapshot[];
 };
+
+const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#6366f1'];
 
 export default function Home() {
   const [pin, setPin] = useState("");
@@ -37,6 +54,8 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [currency, setCurrency] = useState<"usd" | "ils">("usd");
   const [portfolioData, setPortfolioData] = useState<PortfolioData | null>(null);
+  const [activeTab, setActiveTab] = useState<"dashboard" | "holdings" | "settings">("dashboard");
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   const formatCurrency = (value: number, curr: "usd" | "ils") => {
     return new Intl.NumberFormat("en-US", {
@@ -46,6 +65,17 @@ export default function Home() {
       maximumFractionDigits: 0,
     }).format(value);
   };
+
+  const assetAllocationData = useMemo(() => {
+    if (!portfolioData?.assets) return [];
+    const reduced = portfolioData.assets.reduce((acc, asset) => {
+      const key = asset.sector || asset.asset_class || 'Other';
+      acc[key] = (acc[key] || 0) + (currency === "usd" ? asset.value_usd : asset.value_ils);
+      return acc;
+    }, {} as Record<string, number>);
+
+    return Object.entries(reduced).map(([name, value]) => ({ name, value }));
+  }, [portfolioData?.assets, currency]);
 
   const fetchPortfolio = async (currentPin: string) => {
     try {
@@ -218,7 +248,7 @@ export default function Home() {
         </div>
       )}
 
-      {currentMetrics && (
+      {activeTab === "dashboard" && currentMetrics && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between">
             <div className="flex items-center justify-between mb-4">
@@ -259,53 +289,195 @@ export default function Home() {
               <p className={`text-3xl font-bold tracking-tight ${currentMetrics.capitalProfit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                 {currentMetrics.capitalProfit >= 0 ? "+" : ""}{formatCurrency(currentMetrics.capitalProfit, currency)}
               </p>
+              <div className="text-sm text-slate-400 mt-2 flex items-center justify-between">
+                <span>Capital: {formatCurrency(currentMetrics.capitalProfit, currency)}</span>
+                <span>•</span>
+                <span>DRIP: {formatCurrency(currentMetrics.totalDrip, currency)}</span>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-        <div className="p-6 border-b border-slate-800">
-          <h2 className="text-xl font-bold text-white">Holdings</h2>
+      {activeTab === "dashboard" && portfolioData?.snapshots && portfolioData.snapshots.length > 0 && (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-8">
+          <h3 className="text-xl font-bold text-white mb-6">Portfolio History</h3>
+          <div className="h-80 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={portfolioData.snapshots}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis
+                  dataKey="date"
+                  stroke="#94a3b8"
+                  tickFormatter={(val) => new Date(val).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                />
+                <YAxis
+                  stroke="#94a3b8"
+                  tickFormatter={(val) => `$${(val / 1000).toFixed(0)}k`}
+                />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b' }}
+                  itemStyle={{ color: '#e2e8f0' }}
+                  labelStyle={{ color: '#94a3b8' }}
+                  formatter={(value: unknown) => {
+                    const numValue = Number(value);
+                    if (isNaN(numValue)) return [String(value), 'Value'];
+                    return [new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(numValue), 'Value'];
+                  }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="total_value"
+                  stroke="#3b82f6"
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 8, fill: '#3b82f6' }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm whitespace-nowrap">
-            <thead className="bg-slate-950/50 text-slate-400">
-              <tr>
-                <th className="px-6 py-4 font-medium">Ticker</th>
-                <th className="px-6 py-4 font-medium text-right">Quantity</th>
-                <th className="px-6 py-4 font-medium text-right">Current Price</th>
-                <th className="px-6 py-4 font-medium text-right">Value ({currency.toUpperCase()})</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800">
-              {portfolioData?.assets.length === 0 ? (
+      )}
+
+      {activeTab === "dashboard" && portfolioData?.assets && portfolioData.assets.length > 0 && (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-8">
+          <h3 className="text-xl font-bold text-white mb-6">Asset Allocation</h3>
+          <div className="h-80 w-full flex items-center justify-center">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={assetAllocationData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={80}
+                  outerRadius={120}
+                  paddingAngle={5}
+                  dataKey="value"
+                >
+                  {assetAllocationData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b' }}
+                  itemStyle={{ color: '#e2e8f0' }}
+                  formatter={(value: unknown) => {
+                    const numValue = Number(value);
+                    if (isNaN(numValue)) return String(value);
+                    return formatCurrency(numValue, currency);
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "holdings" && (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+          <div className="p-6 border-b border-slate-800">
+            <h2 className="text-xl font-bold text-white">Holdings</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm whitespace-nowrap">
+              <thead className="bg-slate-950/50 text-slate-400">
                 <tr>
-                  <td colSpan={4} className="px-6 py-8 text-center text-slate-500">
-                    No holdings found.
-                  </td>
+                  <th className="px-6 py-4 font-medium">Ticker</th>
+                  <th className="px-6 py-4 font-medium text-right">Quantity</th>
+                  <th className="px-6 py-4 font-medium text-right">Current Price</th>
+                  <th className="px-6 py-4 font-medium text-right">Value ({currency.toUpperCase()})</th>
                 </tr>
-              ) : (
-                portfolioData?.assets.filter(a => a.quantity > 0).map((asset) => (
-                  <tr key={asset.ticker} className="hover:bg-slate-800/50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="font-semibold text-white">{asset.ticker}</div>
-                      <div className="text-slate-500 text-xs mt-0.5">{asset.name || "Unknown Asset"}</div>
-                    </td>
-                    <td className="px-6 py-4 text-right text-slate-300">{asset.quantity.toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>
-                    <td className="px-6 py-4 text-right text-slate-300">
-                      {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(asset.current_price || 0)}
-                    </td>
-                    <td className="px-6 py-4 text-right font-medium text-white">
-                      {formatCurrency(currency === "usd" ? asset.value_usd : asset.value_ils, currency)}
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {portfolioData?.assets.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-8 text-center text-slate-500">
+                      No holdings found.
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  portfolioData?.assets.filter(a => a.quantity > 0).map((asset) => (
+                    <React.Fragment key={asset.ticker}>
+                      <tr
+                        className="hover:bg-slate-800/50 transition-colors cursor-pointer"
+                        onClick={() => setExpandedRow(expandedRow === asset.ticker ? null : asset.ticker)}
+                      >
+                        <td className="px-6 py-4">
+                          <div className="font-semibold text-white flex items-center gap-2">
+                            {asset.ticker}
+                          </div>
+                          <div className="text-slate-500 text-xs mt-0.5">{asset.name || "Unknown Asset"}</div>
+                        </td>
+                        <td className="px-6 py-4 text-right text-slate-300">{asset.quantity.toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>
+                        <td className="px-6 py-4 text-right text-slate-300">
+                          {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(asset.current_price || 0)}
+                        </td>
+                        <td className="px-6 py-4 text-right font-medium text-white">
+                          {formatCurrency(currency === "usd" ? asset.value_usd : asset.value_ils, currency)}
+                        </td>
+                      </tr>
+                      {expandedRow === asset.ticker && (
+                        <tr className="bg-slate-900/50">
+                          <td colSpan={4} className="px-6 py-4">
+                            <div className="grid grid-cols-3 gap-4 text-sm bg-slate-950 p-4 rounded-xl border border-slate-800">
+                              <div>
+                                <p className="text-slate-500 mb-1">Total Profit (%)</p>
+                                <p className={`font-medium ${asset.total_profit_pct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                  {asset.total_profit_pct >= 0 ? "+" : ""}{asset.total_profit_pct.toFixed(2)}%
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-slate-500 mb-1">Total Profit ($)</p>
+                                <p className={`font-medium ${asset.capital_profit_usd >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                  {asset.capital_profit_usd >= 0 ? "+" : ""}{formatCurrency(currency === "usd" ? asset.capital_profit_usd : asset.capital_profit_ils, currency)}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-slate-500 mb-1">Reinvested (DRIP)</p>
+                                <p className="font-medium text-white">
+                                  {formatCurrency(currency === "usd" ? asset.drip_usd : asset.drip_ils, currency)}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
+
+      {activeTab === "settings" && (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden p-6">
+          <h2 className="text-xl font-bold text-white mb-4">Settings</h2>
+          <p className="text-slate-400">Settings configuration will be available here.</p>
+        </div>
+      )}
+
+      <nav className="fixed bottom-0 left-0 w-full h-16 bg-slate-900 border-t border-slate-800 flex items-center justify-around z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.5)]">
+        <button
+          onClick={() => setActiveTab("dashboard")}
+          className={`text-sm font-medium transition-colors cursor-pointer ${activeTab === "dashboard" ? "text-blue-500" : "text-slate-400 hover:text-slate-200"}`}
+        >
+          Dashboard
+        </button>
+        <button
+          onClick={() => setActiveTab("holdings")}
+          className={`text-sm font-medium transition-colors cursor-pointer ${activeTab === "holdings" ? "text-blue-500" : "text-slate-400 hover:text-slate-200"}`}
+        >
+          Holdings
+        </button>
+        <button
+          onClick={() => setActiveTab("settings")}
+          className={`text-sm font-medium transition-colors cursor-pointer ${activeTab === "settings" ? "text-blue-500" : "text-slate-400 hover:text-slate-200"}`}
+        >
+          Settings
+        </button>
+      </nav>
     </div>
   );
 }
