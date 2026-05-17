@@ -44,24 +44,55 @@ export async function GET(request: Request) {
     // 4. Calculate Aggregate Metrics
     const holdings = calculateHoldings(allTransactions);
 
+    // Group transactions by ticker for O(1) lookup
+    const transactionsByTicker = new Map<string, typeof allTransactions>();
+    for (const tx of allTransactions) {
+      if (!tx.ticker) continue;
+      if (!transactionsByTicker.has(tx.ticker)) {
+        transactionsByTicker.set(tx.ticker, []);
+      }
+      transactionsByTicker.get(tx.ticker)!.push(tx);
+    }
+
     let totalMarketValueUsd = 0;
     const enrichedAssets = allAssets.map(asset => {
       const quantity = holdings[asset.ticker] || 0;
       const valueUsd = quantity * (asset.current_price || 0);
       totalMarketValueUsd += valueUsd;
 
+      const assetTransactions = transactionsByTicker.get(asset.ticker) || [];
+
+      const netInvestedAssetUsd = calculateNetInvested(assetTransactions);
+      const profitMetricsAssetUsd = calculateProfitMetrics(assetTransactions, valueUsd, netInvestedAssetUsd);
+
+      const netInvestedAssetIls = calculateNetInvested(assetTransactions, true);
+      const profitMetricsAssetIls = calculateProfitMetrics(assetTransactions, valueUsd * exchangeRate, netInvestedAssetIls, true);
+
+      const totalProfitPctUsd = netInvestedAssetUsd > 0 ? (profitMetricsAssetUsd.netProfit / netInvestedAssetUsd) * 100 : 0;
+      const totalProfitPctIls = netInvestedAssetIls > 0 ? (profitMetricsAssetIls.netProfit / netInvestedAssetIls) * 100 : 0;
+
       return {
         ...asset,
         quantity,
         value_usd: valueUsd,
         value_ils: valueUsd * exchangeRate,
+        capital_profit_usd: profitMetricsAssetUsd.capitalProfit,
+        capital_profit_ils: profitMetricsAssetIls.capitalProfit,
+        drip_usd: profitMetricsAssetUsd.totalDrip,
+        drip_ils: profitMetricsAssetIls.totalDrip,
+        total_profit_pct: totalProfitPctUsd, // Will be deprecated in UI
+        total_profit_pct_usd: totalProfitPctUsd,
+        total_profit_pct_ils: totalProfitPctIls,
       };
     });
 
     const netInvestedUsd = calculateNetInvested(allTransactions);
     const profitMetricsUsd = calculateProfitMetrics(allTransactions, totalMarketValueUsd, netInvestedUsd);
 
-    // 5. Apply Currency Lens (Convert USD metrics to ILS)
+    const netInvestedIls = calculateNetInvested(allTransactions, true);
+    const profitMetricsIls = calculateProfitMetrics(allTransactions, totalMarketValueUsd * exchangeRate, netInvestedIls, true);
+
+    // 5. Apply Currency Lens (Convert USD metrics to ILS, except Net Invested & Profit which are historic)
     const metrics = {
       usd: {
         totalMarketValue: totalMarketValueUsd,
@@ -72,10 +103,10 @@ export async function GET(request: Request) {
       },
       ils: {
         totalMarketValue: totalMarketValueUsd * exchangeRate,
-        netInvested: netInvestedUsd * exchangeRate,
-        capitalProfit: profitMetricsUsd.capitalProfit * exchangeRate,
-        totalDrip: profitMetricsUsd.totalDrip * exchangeRate,
-        netProfit: profitMetricsUsd.netProfit * exchangeRate,
+        netInvested: netInvestedIls,
+        capitalProfit: profitMetricsIls.capitalProfit,
+        totalDrip: profitMetricsIls.totalDrip,
+        netProfit: profitMetricsIls.netProfit,
       },
       exchangeRate
     };
