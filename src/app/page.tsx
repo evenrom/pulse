@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { Lock, RefreshCw, DollarSign, Activity, TrendingUp, AlertCircle, ArrowRight } from "lucide-react";
+import { Lock, RefreshCw, DollarSign, Activity, TrendingUp, AlertCircle, ArrowRight, Calculator } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { PALETTE, ENGINE_MAP, SECTOR_TO_ENGINE, GEO_BREAKDOWN, SECTOR_BREAKDOWN } from "../lib/config";
 
@@ -21,6 +21,7 @@ type Asset = {
   total_profit_pct_ils: number;
   drip_usd: number;
   drip_ils: number;
+  target_pct?: number;
 };
 
 type Snapshot = {
@@ -55,8 +56,21 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [currency, setCurrency] = useState<"usd" | "ils">("usd");
   const [portfolioData, setPortfolioData] = useState<PortfolioData | null>(null);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "holdings" | "settings">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "holdings" | "simulate">("dashboard");
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+
+  const [newCapital, setNewCapital] = useState<string>("");
+  const [targetWeights, setTargetWeights] = useState<Record<string, number>>({});
+
+  React.useEffect(() => {
+    if (portfolioData?.assets) {
+      const initialWeights: Record<string, number> = {};
+      portfolioData.assets.forEach(asset => {
+        initialWeights[asset.ticker] = (asset.target_pct || 0) * 100;
+      });
+      setTargetWeights(initialWeights);
+    }
+  }, [portfolioData?.assets]);
 
   const formatCurrency = (value: number, curr: "usd" | "ils") => {
     return new Intl.NumberFormat("en-US", {
@@ -592,31 +606,165 @@ export default function Home() {
         </div>
       )}
 
-      {activeTab === "settings" && (
+      {activeTab === "simulate" && (() => {
+        const newCapitalNum = Number(newCapital) || 0;
+        const exchangeRate = portfolioData?.metrics.exchangeRate || 1;
+        const newCapitalUsd = currency === "usd" ? newCapitalNum : newCapitalNum / exchangeRate;
+        const currentTotalMarketValueUsd = portfolioData?.metrics.usd.totalMarketValue || 0;
+        const projectedTotalUsd = currentTotalMarketValueUsd + newCapitalUsd;
+
+        const assetsToRender = portfolioData?.assets.filter(a => a.quantity > 0 || (a.target_pct || 0) > 0) || [];
+
+        let totalPositiveDeficitsUsd = 0;
+        assetsToRender.forEach(asset => {
+          const targetValueUsd = projectedTotalUsd * ((targetWeights[asset.ticker] || 0) / 100);
+          const deficitUsd = targetValueUsd - asset.value_usd;
+          if (deficitUsd > 0) {
+            totalPositiveDeficitsUsd += deficitUsd;
+          }
+        });
+
+        const showWarningBanner = totalPositiveDeficitsUsd > newCapitalUsd && newCapitalUsd > 0;
+        const isInsufficientCapital = totalPositiveDeficitsUsd > newCapitalUsd;
+        const missingCapitalUsd = totalPositiveDeficitsUsd - newCapitalUsd;
+        const missingCapitalDisplay = currency === "usd" ? missingCapitalUsd : missingCapitalUsd * exchangeRate;
+
+        return (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden p-6">
-          <h2 className="text-xl font-bold text-white mb-4">Settings</h2>
-          <p className="text-slate-400">Settings configuration will be available here.</p>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <Calculator className="w-5 h-5 text-blue-400" />
+              Rebalancing Simulator
+            </h2>
+          </div>
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-slate-400 mb-2">New Capital to Invest ({currency.toUpperCase()})</label>
+            <input
+              type="number"
+              value={newCapital}
+              onChange={(e) => setNewCapital(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+              placeholder="e.g. 10000"
+            />
+          </div>
+
+          {showWarningBanner && (
+            <div className="mb-6 bg-red-950/30 border border-red-900/50 rounded-xl p-4 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-400">
+                ההון שהוזן אינו מספיק לאיזון מושלם ללא מכירה. נדרשת תוספת של <strong className="font-semibold">{formatCurrency(missingCapitalDisplay, currency)}</strong> כדי להגיע לאיזון מלא.
+              </p>
+            </div>
+          )}
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm whitespace-nowrap">
+              <thead className="bg-slate-950/50 text-slate-400 border-y border-slate-800">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Asset</th>
+                  <th className="px-4 py-3 font-medium text-right">Current Value</th>
+                  <th className="px-4 py-3 font-medium text-right">Current Weight</th>
+                  <th className="px-4 py-3 font-medium text-right w-32">Target (%)</th>
+                  <th className="px-4 py-3 font-medium text-right text-blue-400">Amount to Buy</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {assetsToRender.map((asset) => {
+                  const currentValueDisplay = currency === "usd" ? asset.value_usd : asset.value_ils;
+                  const currentTotalMarketValueDisplay = currentMetrics?.totalMarketValue || 0;
+                  const currentWeight = currentTotalMarketValueDisplay > 0 ? (currentValueDisplay / currentTotalMarketValueDisplay) * 100 : 0;
+
+                  const targetValueUsd = projectedTotalUsd * ((targetWeights[asset.ticker] || 0) / 100);
+                  const idealDeficitUsd = targetValueUsd - asset.value_usd;
+
+                  let amountToBuyUsd = 0;
+                  if (idealDeficitUsd > 0) {
+                    if (isInsufficientCapital) {
+                      amountToBuyUsd = newCapitalUsd * (idealDeficitUsd / totalPositiveDeficitsUsd);
+                    } else {
+                      amountToBuyUsd = idealDeficitUsd;
+                    }
+                  }
+                  const amountToBuyDisplay = currency === "usd" ? amountToBuyUsd : amountToBuyUsd * exchangeRate;
+
+                  return (
+                    <tr key={asset.ticker} className="hover:bg-slate-800/30 transition-colors">
+                      <td className="px-4 py-3 font-medium text-white">{asset.ticker}</td>
+                      <td className="px-4 py-3 text-right text-slate-300">{formatCurrency(currentValueDisplay, currency)}</td>
+                      <td className="px-4 py-3 text-right text-slate-300">{currentWeight.toFixed(1)}%</td>
+                      <td className="px-4 py-3 text-right">
+                        <input
+                          type="number"
+                          value={targetWeights[asset.ticker] !== undefined ? targetWeights[asset.ticker] : ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setTargetWeights(prev => ({
+                              ...prev,
+                              [asset.ticker]: val === "" ? 0 : Number(val)
+                            }));
+                          }}
+                          className="w-20 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-white text-right focus:outline-none focus:border-blue-500"
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium text-emerald-400">
+                        {amountToBuyDisplay > 0 ? `+${formatCurrency(amountToBuyDisplay, currency)}` : "$0"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot className="bg-slate-950/50 text-slate-400 border-t border-slate-800">
+                <tr>
+                  <td colSpan={3} className="px-4 py-3 font-medium text-right text-slate-300">Total</td>
+                  <td className="px-4 py-3 text-right">
+                    <span className={`font-medium ${Object.values(targetWeights).reduce((a, b) => a + (b || 0), 0) !== 100 ? "text-red-500" : "text-slate-300"}`}>
+                      {Object.values(targetWeights).reduce((a, b) => a + (b || 0), 0).toFixed(1)}%
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right font-medium text-emerald-400">
+                    +{formatCurrency(assetsToRender.reduce((sum, asset) => {
+                        const targetValueUsd = projectedTotalUsd * ((targetWeights[asset.ticker] || 0) / 100);
+                        const idealDeficitUsd = targetValueUsd - asset.value_usd;
+                        let amountToBuyUsd = 0;
+                        if (idealDeficitUsd > 0) {
+                          if (isInsufficientCapital) {
+                            amountToBuyUsd = newCapitalUsd * (idealDeficitUsd / totalPositiveDeficitsUsd);
+                          } else {
+                            amountToBuyUsd = idealDeficitUsd;
+                          }
+                        }
+                        return sum + (currency === "usd" ? amountToBuyUsd : amountToBuyUsd * exchangeRate);
+                    }, 0), currency)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         </div>
-      )}
+        );
+      })()}
 
       <nav className="fixed bottom-0 left-0 w-full h-16 bg-slate-900 border-t border-slate-800 flex items-center justify-around z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.5)]">
         <button
           onClick={() => setActiveTab("dashboard")}
-          className={`text-sm font-medium transition-colors cursor-pointer ${activeTab === "dashboard" ? "text-blue-500" : "text-slate-400 hover:text-slate-200"}`}
+          className={`flex flex-col items-center justify-center gap-1 text-xs sm:text-sm font-medium transition-colors cursor-pointer ${activeTab === "dashboard" ? "text-blue-500" : "text-slate-400 hover:text-slate-200"}`}
         >
-          Dashboard
+          <Activity className="w-5 h-5" />
+          <span>Dashboard</span>
         </button>
         <button
           onClick={() => setActiveTab("holdings")}
-          className={`text-sm font-medium transition-colors cursor-pointer ${activeTab === "holdings" ? "text-blue-500" : "text-slate-400 hover:text-slate-200"}`}
+          className={`flex flex-col items-center justify-center gap-1 text-xs sm:text-sm font-medium transition-colors cursor-pointer ${activeTab === "holdings" ? "text-blue-500" : "text-slate-400 hover:text-slate-200"}`}
         >
-          Holdings
+          <DollarSign className="w-5 h-5" />
+          <span>Holdings</span>
         </button>
         <button
-          onClick={() => setActiveTab("settings")}
-          className={`text-sm font-medium transition-colors cursor-pointer ${activeTab === "settings" ? "text-blue-500" : "text-slate-400 hover:text-slate-200"}`}
+          onClick={() => setActiveTab("simulate")}
+          className={`flex flex-col items-center justify-center gap-1 text-xs sm:text-sm font-medium transition-colors cursor-pointer ${activeTab === "simulate" ? "text-blue-500" : "text-slate-400 hover:text-slate-200"}`}
         >
-          Settings
+          <Calculator className="w-5 h-5" />
+          <span>Simulate</span>
         </button>
       </nav>
     </div>
