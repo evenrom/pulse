@@ -309,7 +309,7 @@ export default function Home() {
                 <XAxis
                   dataKey="date"
                   stroke="#94a3b8"
-                  tickFormatter={(val) => new Date(val).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                  tickFormatter={(val) => new Date(val).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                 />
                 <YAxis
                   stroke="#94a3b8"
