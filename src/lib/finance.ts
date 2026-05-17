@@ -15,20 +15,18 @@ export function calculateNetInvested(txs: Transaction[]): number {
   let realizedGains = 0;
 
   for (const tx of txs) {
+    const amount = Math.abs(Number(tx.total_amount || 0));
+
     if (tx.action === "BUY" || tx.action === "DRIP") {
-      // For BUY, total_amount is usually positive representing cost
-      currentCost += tx.total_amount || 0;
+      currentCost += amount;
     } else if (tx.action === "SELL") {
-      // For SELL, total_amount is also positive representing value received,
-      // so it reduces our cost basis
-      currentCost -= tx.total_amount || 0;
+      currentCost -= amount;
     }
 
-    // Add realized P/L
     realizedGains += tx.realized_pl || 0;
   }
 
-  return currentCost - realizedGains;
+  return currentCost + realizedGains;
 }
 
 /**
@@ -80,15 +78,13 @@ export function calculateProfitMetrics(txs: Transaction[], marketValue: number, 
 
   for (const tx of txs) {
     if (tx.action === "DRIP") {
-      totalDrip += tx.total_amount || 0;
+      totalDrip += Math.abs(Number(tx.total_amount || 0));
     }
   }
 
-  // Net Profit = Total Market Value - Net Invested
-  const netProfit = marketValue - netInvested;
-
-  // Capital Profit = Net Profit - Total DRIP
-  const capitalProfit = netProfit - totalDrip;
+  // Capital Profit = Total Market Value - Net Invested
+  const capitalProfit = marketValue - netInvested;
+  const netProfit = capitalProfit;
 
   return {
     capitalProfit,
