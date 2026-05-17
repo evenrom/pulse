@@ -8,14 +8,16 @@ export type Asset = InferSelectModel<typeof assets>;
  * Calculate Net Invested based on the Golden Formula:
  * Net Invested = Current Cost - Realized Gains
  * @param txs List of transactions
+ * @param useHistoricRate If true, applies tx.historic_rate to calculations
  * @returns Total Net Invested
  */
-export function calculateNetInvested(txs: Transaction[]): number {
+export function calculateNetInvested(txs: Transaction[], useHistoricRate = false): number {
   let currentCost = 0;
   let realizedGains = 0;
 
   for (const tx of txs) {
-    const amount = Math.abs(Number(tx.total_amount || 0));
+    const rate = useHistoricRate ? (tx.historic_rate || 1) : 1;
+    const amount = Math.abs(Number(tx.total_amount || 0)) * rate;
 
     if (tx.action === "BUY" || tx.action === "DRIP") {
       currentCost += amount;
@@ -23,7 +25,7 @@ export function calculateNetInvested(txs: Transaction[]): number {
       currentCost -= amount;
     }
 
-    realizedGains += tx.realized_pl || 0;
+    realizedGains += (tx.realized_pl || 0) * rate;
   }
 
   return currentCost + realizedGains;
@@ -71,14 +73,16 @@ export function calculateHoldings(txs: Transaction[]): Record<string, number> {
  * @param txs List of transactions
  * @param marketValue Total Market Value
  * @param netInvested Total Net Invested
+ * @param useHistoricRate If true, applies tx.historic_rate to DRIP and realized gains
  * @returns Object with capitalProfit and drip totals
  */
-export function calculateProfitMetrics(txs: Transaction[], marketValue: number, netInvested: number) {
+export function calculateProfitMetrics(txs: Transaction[], marketValue: number, netInvested: number, useHistoricRate = false) {
   let totalDrip = 0;
 
   for (const tx of txs) {
     if (tx.action === "DRIP") {
-      totalDrip += Math.abs(Number(tx.total_amount || 0));
+      const rate = useHistoricRate ? (tx.historic_rate || 1) : 1;
+      totalDrip += Math.abs(Number(tx.total_amount || 0)) * rate;
     }
   }
 
@@ -90,7 +94,8 @@ export function calculateProfitMetrics(txs: Transaction[], marketValue: number, 
 
   let totalRealizedGains = 0;
   for (const tx of txs) {
-    totalRealizedGains += tx.realized_pl || 0;
+    const rate = useHistoricRate ? (tx.historic_rate || 1) : 1;
+    totalRealizedGains += (tx.realized_pl || 0) * rate;
   }
 
   const netProfit = capitalProfit + totalRealizedGains + totalDrip;

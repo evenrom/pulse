@@ -31,13 +31,6 @@ export default function RootLayout({
         <main className="flex-1 pb-16 relative">
           {children}
         </main>
-
-        {/* Bottom Navigation Placeholder */}
-        <nav className="fixed bottom-0 w-full h-16 bg-slate-900 border-t border-slate-800 flex items-center justify-around z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.5)]">
-          <div className="text-slate-400 text-sm font-medium hover:text-slate-200 transition-colors cursor-pointer">Dashboard</div>
-          <div className="text-slate-400 text-sm font-medium hover:text-slate-200 transition-colors cursor-pointer">Holdings</div>
-          <div className="text-slate-400 text-sm font-medium hover:text-slate-200 transition-colors cursor-pointer">Settings</div>
-        </nav>
       </body>
     </html>
   );
