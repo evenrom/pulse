@@ -73,6 +73,7 @@ export async function GET(request: Request) {
 
       return {
         ...asset,
+        target_pct: asset.target_pct || 0,
         quantity,
         value_usd: valueUsd,
         value_ils: valueUsd * exchangeRate,
