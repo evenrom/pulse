@@ -606,7 +606,30 @@ export default function Home() {
         </div>
       )}
 
-      {activeTab === "simulate" && (
+      {activeTab === "simulate" && (() => {
+        const newCapitalNum = Number(newCapital) || 0;
+        const exchangeRate = portfolioData?.metrics.exchangeRate || 1;
+        const newCapitalUsd = currency === "usd" ? newCapitalNum : newCapitalNum / exchangeRate;
+        const currentTotalMarketValueUsd = portfolioData?.metrics.usd.totalMarketValue || 0;
+        const projectedTotalUsd = currentTotalMarketValueUsd + newCapitalUsd;
+
+        const assetsToRender = portfolioData?.assets.filter(a => a.quantity > 0 || (a.target_pct || 0) > 0) || [];
+
+        let totalPositiveDeficitsUsd = 0;
+        assetsToRender.forEach(asset => {
+          const targetValueUsd = projectedTotalUsd * ((targetWeights[asset.ticker] || 0) / 100);
+          const deficitUsd = targetValueUsd - asset.value_usd;
+          if (deficitUsd > 0) {
+            totalPositiveDeficitsUsd += deficitUsd;
+          }
+        });
+
+        const showWarningBanner = totalPositiveDeficitsUsd > newCapitalUsd && newCapitalUsd > 0;
+        const isInsufficientCapital = totalPositiveDeficitsUsd > newCapitalUsd;
+        const missingCapitalUsd = totalPositiveDeficitsUsd - newCapitalUsd;
+        const missingCapitalDisplay = currency === "usd" ? missingCapitalUsd : missingCapitalUsd * exchangeRate;
+
+        return (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden p-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -615,7 +638,7 @@ export default function Home() {
             </h2>
           </div>
           <div className="mb-6">
-            <label className="block text-sm font-medium text-slate-400 mb-2">New Capital to Invest ($)</label>
+            <label className="block text-sm font-medium text-slate-400 mb-2">New Capital to Invest ({currency.toUpperCase()})</label>
             <input
               type="number"
               value={newCapital}
@@ -624,6 +647,16 @@ export default function Home() {
               placeholder="e.g. 10000"
             />
           </div>
+
+          {showWarningBanner && (
+            <div className="mb-6 bg-red-950/30 border border-red-900/50 rounded-xl p-4 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-400">
+                ההון שהוזן אינו מספיק לאיזון מושלם ללא מכירה. נדרשת תוספת של <strong className="font-semibold">{formatCurrency(missingCapitalDisplay, currency)}</strong> כדי להגיע לאיזון מלא.
+              </p>
+            </div>
+          )}
+
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm whitespace-nowrap">
               <thead className="bg-slate-950/50 text-slate-400 border-y border-slate-800">
@@ -636,20 +669,28 @@ export default function Home() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
-                {portfolioData?.assets.filter(a => a.quantity > 0).map((asset) => {
-                  const currentValue = currency === "usd" ? asset.value_usd : asset.value_ils;
-                  const currentTotalMarketValue = currentMetrics?.totalMarketValue || 0;
-                  const currentWeight = currentTotalMarketValue > 0 ? (currentValue / currentTotalMarketValue) * 100 : 0;
+                {assetsToRender.map((asset) => {
+                  const currentValueDisplay = currency === "usd" ? asset.value_usd : asset.value_ils;
+                  const currentTotalMarketValueDisplay = currentMetrics?.totalMarketValue || 0;
+                  const currentWeight = currentTotalMarketValueDisplay > 0 ? (currentValueDisplay / currentTotalMarketValueDisplay) * 100 : 0;
 
-                  const projectedTotalValue = currentTotalMarketValue + (Number(newCapital) || 0);
-                  const targetValue = projectedTotalValue * ((targetWeights[asset.ticker] || 0) / 100);
-                  const deficit = targetValue - currentValue;
-                  const amountToBuy = deficit > 0 ? deficit : 0;
+                  const targetValueUsd = projectedTotalUsd * ((targetWeights[asset.ticker] || 0) / 100);
+                  const idealDeficitUsd = targetValueUsd - asset.value_usd;
+
+                  let amountToBuyUsd = 0;
+                  if (idealDeficitUsd > 0) {
+                    if (isInsufficientCapital) {
+                      amountToBuyUsd = newCapitalUsd * (idealDeficitUsd / totalPositiveDeficitsUsd);
+                    } else {
+                      amountToBuyUsd = idealDeficitUsd;
+                    }
+                  }
+                  const amountToBuyDisplay = currency === "usd" ? amountToBuyUsd : amountToBuyUsd * exchangeRate;
 
                   return (
                     <tr key={asset.ticker} className="hover:bg-slate-800/30 transition-colors">
                       <td className="px-4 py-3 font-medium text-white">{asset.ticker}</td>
-                      <td className="px-4 py-3 text-right text-slate-300">{formatCurrency(currentValue, currency)}</td>
+                      <td className="px-4 py-3 text-right text-slate-300">{formatCurrency(currentValueDisplay, currency)}</td>
                       <td className="px-4 py-3 text-right text-slate-300">{currentWeight.toFixed(1)}%</td>
                       <td className="px-4 py-3 text-right">
                         <input
@@ -666,16 +707,42 @@ export default function Home() {
                         />
                       </td>
                       <td className="px-4 py-3 text-right font-medium text-emerald-400">
-                        {amountToBuy > 0 ? `+${formatCurrency(amountToBuy, currency)}` : "$0"}
+                        {amountToBuyDisplay > 0 ? `+${formatCurrency(amountToBuyDisplay, currency)}` : "$0"}
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
+              <tfoot className="bg-slate-950/50 text-slate-400 border-t border-slate-800">
+                <tr>
+                  <td colSpan={3} className="px-4 py-3 font-medium text-right text-slate-300">Total</td>
+                  <td className="px-4 py-3 text-right">
+                    <span className={`font-medium ${Object.values(targetWeights).reduce((a, b) => a + (b || 0), 0) !== 100 ? "text-red-500" : "text-slate-300"}`}>
+                      {Object.values(targetWeights).reduce((a, b) => a + (b || 0), 0).toFixed(1)}%
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right font-medium text-emerald-400">
+                    +{formatCurrency(assetsToRender.reduce((sum, asset) => {
+                        const targetValueUsd = projectedTotalUsd * ((targetWeights[asset.ticker] || 0) / 100);
+                        const idealDeficitUsd = targetValueUsd - asset.value_usd;
+                        let amountToBuyUsd = 0;
+                        if (idealDeficitUsd > 0) {
+                          if (isInsufficientCapital) {
+                            amountToBuyUsd = newCapitalUsd * (idealDeficitUsd / totalPositiveDeficitsUsd);
+                          } else {
+                            amountToBuyUsd = idealDeficitUsd;
+                          }
+                        }
+                        return sum + (currency === "usd" ? amountToBuyUsd : amountToBuyUsd * exchangeRate);
+                    }, 0), currency)}
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       <nav className="fixed bottom-0 left-0 w-full h-16 bg-slate-900 border-t border-slate-800 flex items-center justify-around z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.5)]">
         <button
