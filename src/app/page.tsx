@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from "react";
 import { Lock, RefreshCw, DollarSign, Activity, TrendingUp, AlertCircle, ArrowRight } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { PALETTE, ENGINE_MAP, SECTOR_TO_ENGINE, GEO_BREAKDOWN, SECTOR_BREAKDOWN } from "../lib/config";
 
 type Asset = {
   ticker: string;
@@ -46,8 +47,6 @@ type PortfolioData = {
   snapshots: Snapshot[];
 };
 
-const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#6366f1'];
-
 export default function Home() {
   const [pin, setPin] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -68,15 +67,75 @@ export default function Home() {
     }).format(value);
   };
 
-  const assetAllocationData = useMemo(() => {
-    if (!portfolioData?.assets) return [];
-    const reduced = portfolioData.assets.reduce((acc, asset) => {
-      const key = asset.sector || asset.asset_class || 'Other';
-      acc[key] = (acc[key] || 0) + (currency === "usd" ? asset.value_usd : asset.value_ils);
-      return acc;
-    }, {} as Record<string, number>);
+  const { engineData, sectorData, regionalData, flatSectorData } = useMemo(() => {
+    if (!portfolioData?.assets) return { engineData: [], sectorData: [], regionalData: [], flatSectorData: [] };
 
-    return Object.entries(reduced).map(([name, value]) => ({ name, value }));
+    const sectorValues: Record<string, number> = {};
+    const regionValues: Record<string, number> = {};
+
+    portfolioData.assets.forEach(asset => {
+      const val = currency === "usd" ? asset.value_usd : asset.value_ils;
+      if (val <= 0) return;
+
+      const sectors = SECTOR_BREAKDOWN[asset.ticker] || { 'Other': 1.0 };
+      Object.entries(sectors).forEach(([sec, weight]) => {
+        sectorValues[sec] = (sectorValues[sec] || 0) + val * weight;
+      });
+
+      const regions = GEO_BREAKDOWN[asset.ticker] || { 'Unknown': 1.0 };
+      Object.entries(regions).forEach(([reg, weight]) => {
+        regionValues[reg] = (regionValues[reg] || 0) + val * weight;
+      });
+    });
+
+    const engineValues: Record<string, number> = {};
+    const engineToSectors: Record<string, Record<string, number>> = {};
+
+    Object.keys(ENGINE_MAP).forEach(engine => {
+      engineValues[engine] = 0;
+      engineToSectors[engine] = {};
+    });
+
+    Object.entries(sectorValues).forEach(([sec, val]) => {
+      const foundEngine = SECTOR_TO_ENGINE[sec] || 'Other';
+
+      if (!engineValues[foundEngine]) engineValues[foundEngine] = 0;
+      engineValues[foundEngine] += val;
+
+      if (!engineToSectors[foundEngine]) engineToSectors[foundEngine] = {};
+      engineToSectors[foundEngine][sec] = val;
+    });
+
+    const totalSectorVal = Object.values(sectorValues).reduce((a, b) => a + b, 0) || 1;
+    const totalRegionVal = Object.values(regionValues).reduce((a, b) => a + b, 0) || 1;
+
+    const formattedEngineData = Object.entries(engineValues)
+      .filter(([, val]) => val > 0)
+      .map(([name, value]) => ({ name, value, pct: (value / totalSectorVal) * 100 }))
+      .sort((a, b) => b.value - a.value);
+
+    const formattedSectorData: { name: string; value: number; engine: string; engineIndex: number; sectorIndex: number }[] = [];
+    formattedEngineData.forEach((engine, eIndex) => {
+       const secs = engineToSectors[engine.name] || {};
+       Object.entries(secs)
+         .filter(([, val]) => val > 0)
+         .sort((a, b) => b[1] - a[1])
+         .forEach(([name, value], sIndex) => {
+           formattedSectorData.push({ name, value, engine: engine.name, engineIndex: eIndex, sectorIndex: sIndex });
+         });
+    });
+
+    const formattedRegionalData = Object.entries(regionValues)
+      .filter(([, val]) => val > 0)
+      .map(([name, value]) => ({ name, value, pct: (value / totalRegionVal) * 100 }))
+      .sort((a, b) => b.value - a.value);
+
+    const sortedSectorData = Object.entries(sectorValues)
+      .filter(([, val]) => val > 0)
+      .map(([name, value]) => ({ name, value, pct: (value / totalSectorVal) * 100 }))
+      .sort((a, b) => b.value - a.value);
+
+    return { engineData: formattedEngineData, sectorData: formattedSectorData, regionalData: formattedRegionalData, flatSectorData: sortedSectorData };
   }, [portfolioData?.assets, currency]);
 
   const fetchPortfolio = async (currentPin: string) => {
@@ -342,35 +401,115 @@ export default function Home() {
       )}
 
       {activeTab === "dashboard" && portfolioData?.assets && portfolioData.assets.length > 0 && (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-8">
-          <h3 className="text-xl font-bold text-white mb-6">Asset Allocation</h3>
-          <div className="h-80 w-full flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={assetAllocationData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={80}
-                  outerRadius={120}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {assetAllocationData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b' }}
-                  itemStyle={{ color: '#e2e8f0' }}
-                  formatter={(value: unknown) => {
-                    const numValue = Number(value);
-                    if (isNaN(numValue)) return String(value);
-                    return formatCurrency(numValue, currency);
-                  }}
+        <div className="space-y-6 mb-8">
+          {/* Chart 1: Growth Drivers */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h3 className="text-xl font-bold text-white mb-6">Growth Drivers</h3>
+            <div className="h-80 w-full flex items-center justify-center">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  {/* Outer Ring: Engines */}
+                  <Pie
+                    data={engineData}
+                    dataKey="value"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={110}
+                    outerRadius={140}
+                    stroke="none"
+                  >
+                    {engineData.map((entry, index) => (
+                      <Cell key={`engine-${index}`} fill={PALETTE[index % PALETTE.length]} />
+                    ))}
+                  </Pie>
+                  {/* Inner Ring: Sectors */}
+                  <Pie
+                    data={sectorData}
+                    dataKey="value"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={70}
+                    outerRadius={100}
+                    stroke="none"
+                  >
+                    {sectorData.map((entry, index) => {
+                      const baseColor = PALETTE[entry.engineIndex % PALETTE.length];
+
+                      // Vary opacity: 0.9, 0.7, 0.5, etc.
+                      const opacity = Math.max(0.3, 0.9 - (entry.sectorIndex * 0.2));
+
+                      return <Cell key={`sector-${index}`} fill={baseColor} fillOpacity={opacity} />;
+                    })}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b' }}
+                    itemStyle={{ color: '#e2e8f0' }}
+                    formatter={(value: unknown, name: unknown) => {
+                      const numValue = Number(value);
+                      const safeName = String(name ?? '');
+                      if (isNaN(numValue)) return [String(value), safeName];
+                      return [formatCurrency(numValue, currency), safeName];
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            {/* Custom Legend for Engines */}
+            <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {engineData.map((entry, index) => (
+                <div key={entry.name} className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PALETTE[index % PALETTE.length] }} />
+                  <span className="text-sm text-slate-300">{entry.name}</span>
+                  <span className="text-sm font-medium text-white">{entry.pct.toFixed(1)}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Chart 2: Regional Split */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h3 className="text-xl font-bold text-white mb-6">Regional Split</h3>
+            <div className="h-3 w-full rounded-full flex overflow-hidden mb-4">
+              {regionalData.map((entry, index) => (
+                <div
+                  key={entry.name}
+                  style={{ width: `${entry.pct}%`, backgroundColor: PALETTE[index % PALETTE.length] }}
+                  title={`${entry.name}: ${entry.pct.toFixed(1)}%`}
                 />
-              </PieChart>
-            </ResponsiveContainer>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {regionalData.map((entry, index) => (
+                <div key={entry.name} className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PALETTE[index % PALETTE.length] }} />
+                  <span className="text-sm text-slate-300">{entry.name}</span>
+                  <span className="text-sm font-medium text-white">{entry.pct.toFixed(1)}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Chart 3: Sector Allocation */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h3 className="text-xl font-bold text-white mb-6">Sector Allocation</h3>
+            <div className="h-3 w-full rounded-full flex overflow-hidden mb-4">
+              {flatSectorData.map((entry, index) => (
+                <div
+                  key={entry.name}
+                  style={{ width: `${entry.pct}%`, backgroundColor: PALETTE[index % PALETTE.length] }}
+                  title={`${entry.name}: ${entry.pct.toFixed(1)}%`}
+                />
+              ))}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {flatSectorData.map((entry, index) => (
+                <div key={entry.name} className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PALETTE[index % PALETTE.length] }} />
+                  <span className="text-sm text-slate-300 truncate" title={entry.name}>{entry.name}</span>
+                  <span className="text-sm font-medium text-white">{entry.pct.toFixed(1)}%</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
