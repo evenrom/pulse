@@ -44,13 +44,23 @@ export async function GET(request: Request) {
     // 4. Calculate Aggregate Metrics
     const holdings = calculateHoldings(allTransactions);
 
+    // Group transactions by ticker for O(1) lookup
+    const transactionsByTicker = new Map<string, typeof allTransactions>();
+    for (const tx of allTransactions) {
+      if (!tx.ticker) continue;
+      if (!transactionsByTicker.has(tx.ticker)) {
+        transactionsByTicker.set(tx.ticker, []);
+      }
+      transactionsByTicker.get(tx.ticker)!.push(tx);
+    }
+
     let totalMarketValueUsd = 0;
     const enrichedAssets = allAssets.map(asset => {
       const quantity = holdings[asset.ticker] || 0;
       const valueUsd = quantity * (asset.current_price || 0);
       totalMarketValueUsd += valueUsd;
 
-      const assetTransactions = allTransactions.filter(tx => tx.ticker === asset.ticker);
+      const assetTransactions = transactionsByTicker.get(asset.ticker) || [];
 
       const netInvestedAssetUsd = calculateNetInvested(assetTransactions);
       const profitMetricsAssetUsd = calculateProfitMetrics(assetTransactions, valueUsd, netInvestedAssetUsd);
@@ -58,8 +68,8 @@ export async function GET(request: Request) {
       const netInvestedAssetIls = calculateNetInvested(assetTransactions, true);
       const profitMetricsAssetIls = calculateProfitMetrics(assetTransactions, valueUsd * exchangeRate, netInvestedAssetIls, true);
 
-      // total_profit_pct applies generally to capital profit / net invested (avoid division by 0)
-      const totalProfitPct = netInvestedAssetUsd > 0 ? (profitMetricsAssetUsd.capitalProfit / netInvestedAssetUsd) * 100 : 0;
+      const totalProfitPctUsd = netInvestedAssetUsd > 0 ? (profitMetricsAssetUsd.netProfit / netInvestedAssetUsd) * 100 : 0;
+      const totalProfitPctIls = netInvestedAssetIls > 0 ? (profitMetricsAssetIls.netProfit / netInvestedAssetIls) * 100 : 0;
 
       return {
         ...asset,
@@ -70,7 +80,9 @@ export async function GET(request: Request) {
         capital_profit_ils: profitMetricsAssetIls.capitalProfit,
         drip_usd: profitMetricsAssetUsd.totalDrip,
         drip_ils: profitMetricsAssetIls.totalDrip,
-        total_profit_pct: totalProfitPct,
+        total_profit_pct: totalProfitPctUsd, // Will be deprecated in UI
+        total_profit_pct_usd: totalProfitPctUsd,
+        total_profit_pct_ils: totalProfitPctIls,
       };
     });
 

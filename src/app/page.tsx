@@ -16,6 +16,8 @@ type Asset = {
   capital_profit_usd: number;
   capital_profit_ils: number;
   total_profit_pct: number;
+  total_profit_pct_usd: number;
+  total_profit_pct_ils: number;
   drip_usd: number;
   drip_ils: number;
 };
@@ -422,8 +424,8 @@ export default function Home() {
                             <div className="grid grid-cols-3 gap-4 text-sm bg-slate-950 p-4 rounded-xl border border-slate-800">
                               <div>
                                 <p className="text-slate-500 mb-1">Total Profit (%)</p>
-                                <p className={`font-medium ${asset.total_profit_pct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                                  {asset.total_profit_pct >= 0 ? "+" : ""}{asset.total_profit_pct.toFixed(2)}%
+                                <p className={`font-medium ${(currency === "usd" ? asset.total_profit_pct_usd : asset.total_profit_pct_ils) >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                  {(currency === "usd" ? asset.total_profit_pct_usd : asset.total_profit_pct_ils) >= 0 ? "+" : ""}{(currency === "usd" ? asset.total_profit_pct_usd : asset.total_profit_pct_ils).toFixed(2)}%
                                 </p>
                               </div>
                               <div>
