@@ -431,14 +431,7 @@ export default function Home() {
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={filteredHistory}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                <XAxis
-                  dataKey="formattedDate"
-                  stroke="#94a3b8"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                  dy={10}
-                />
+                <XAxis hide dataKey="formattedDate" />
                 <YAxis
                   hide
                   domain={[-maxAbsReturn, maxAbsReturn]}
