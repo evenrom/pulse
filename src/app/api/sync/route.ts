@@ -1,4 +1,5 @@
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
@@ -21,9 +22,21 @@ export async function POST() {
       return NextResponse.json({ success: true, message: 'No assets found to sync.' }, { status: 200 });
     }
 
+    // Fetch transactions and calculate holdings early
+    const allTxs = await db.select().from(transactions);
+    const holdings = calculateHoldings(allTxs);
+
     // 2. Fetch prices from Alpha Vantage and update DB
     for (const asset of allAssets) {
       if (!asset.ticker) continue;
+
+      // Filter assets: only fetch if holding > 0 or target_pct > 0
+      const currentHolding = holdings[asset.ticker] || 0;
+      const targetPct = asset.target_pct ?? 0;
+
+      if (currentHolding <= 0 && targetPct <= 0) {
+        continue;
+      }
 
       try {
         const response = await fetch(
@@ -36,6 +49,13 @@ export async function POST() {
         }
 
         const data = await response.json();
+
+        // Check for rate limit warnings
+        if (data.Information || data.Note) {
+          console.warn(`Alpha Vantage rate limit warning for ${asset.ticker}:`, data.Information || data.Note);
+          continue;
+        }
+
         const quote = data['Global Quote'];
 
         if (quote && quote['05. price']) {
@@ -50,17 +70,14 @@ export async function POST() {
         console.error(`Error updating price for ${asset.ticker}:`, err);
       }
 
-      // Delay to respect rate limits (5 per min -> 12s per req)
-      await delay(12000);
+      // Reduced delay to 1000ms
+      await delay(1000);
     }
 
     // 3. Calculate new total market value and net invested
     const updatedAssets = await db.select().from(assets);
-    const allTxs = await db.select().from(transactions);
 
-    const holdings = calculateHoldings(allTxs);
     let totalMarketValue = 0;
-
     for (const asset of updatedAssets) {
       if (asset.ticker && asset.current_price && holdings[asset.ticker]) {
         totalMarketValue += asset.current_price * holdings[asset.ticker];
