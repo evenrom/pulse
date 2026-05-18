@@ -8,7 +8,7 @@ import { eq } from 'drizzle-orm';
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export async function GET() {
+export async function POST() {
   try {
     const apiKey = process.env.ALPHA_VANTAGE_API_KEY;
     if (!apiKey) {
@@ -18,7 +18,7 @@ export async function GET() {
     // 1. Fetch all assets
     const allAssets = await db.select().from(assets);
     if (!allAssets || allAssets.length === 0) {
-      return NextResponse.json({ message: 'No assets found to sync.' }, { status: 200 });
+      return NextResponse.json({ success: true, message: 'No assets found to sync.' }, { status: 200 });
     }
 
     // 2. Fetch prices from Alpha Vantage and update DB
@@ -85,9 +85,9 @@ export async function GET() {
       });
     }
 
-    return NextResponse.json({ message: 'Sync completed successfully.' }, { status: 200 });
+    return NextResponse.json({ success: true, message: 'Sync completed successfully.' }, { status: 200 });
   } catch (error: unknown) {
     console.error('Sync API Error:', error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : String(error) || 'Failed to sync market data' }, { status: 500 });
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : String(error) || 'Failed to sync market data' }, { status: 500 });
   }
 }
