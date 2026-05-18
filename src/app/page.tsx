@@ -4,6 +4,7 @@ import React, { useState, useMemo } from "react";
 import { Lock, RefreshCw, DollarSign, Activity, TrendingUp, AlertCircle, ArrowRight, Calculator } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { PALETTE, ENGINE_MAP, SECTOR_TO_ENGINE, GEO_BREAKDOWN, SECTOR_BREAKDOWN } from "../lib/config";
+import { calculateTotalReturnMetrics } from "../lib/finance";
 
 type Asset = {
   ticker: string;
@@ -584,11 +585,7 @@ export default function Home() {
                         const drip = currency === "usd" ? asset.drip_usd : asset.drip_ils;
                         const val = currency === "usd" ? asset.value_usd : asset.value_ils;
 
-                        // We do the same calculation here inline to avoid adding a dependency import
-                        // However, standard logic calculation should be in finance.ts, which is added.
-                        const totalReturn = capProfit + drip;
-                        const totalCost = val - capProfit;
-                        const totalReturnPct = totalCost > 0 ? (totalReturn / totalCost) * 100 : 0;
+                        const { totalReturn, totalReturnPct } = calculateTotalReturnMetrics(capProfit, drip, val);
 
                         return (
                           <tr className="bg-slate-900/50">

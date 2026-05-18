@@ -57,13 +57,13 @@ export function calculateAssetMetrics(txs: Transaction[], marketValue: number, u
  */
 export function calculateTotalReturnMetrics(capitalProfit: number, drip: number, currentValue: number) {
   const totalReturn = capitalProfit + drip;
-  const totalCost = currentValue - capitalProfit;
-  const totalReturnPct = totalCost > 0 ? (totalReturn / totalCost) * 100 : 0;
+  const netInvested = currentValue - capitalProfit;
+  const totalReturnPct = netInvested > 0 ? (totalReturn / netInvested) * 100 : 0;
 
   return {
     totalReturn,
     totalReturnPct,
-    totalCost
+    netInvested
   };
 }
 
