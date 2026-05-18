@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { Lock, RefreshCw, DollarSign, Activity, TrendingUp, AlertCircle, ArrowRight, Calculator } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { PALETTE, ENGINE_MAP, SECTOR_TO_ENGINE, GEO_BREAKDOWN, SECTOR_BREAKDOWN } from "../lib/config";
 import { calculateTotalReturnMetrics } from "../lib/finance";
 
@@ -106,6 +106,11 @@ export default function Home() {
         };
       });
   }, [portfolioData?.history, historyFilter]);
+
+  const maxAbsReturn = useMemo(() => {
+    if (!filteredHistory || filteredHistory.length === 0) return 1;
+    return Math.max(...filteredHistory.map(d => Math.abs(d.return_pct || 0)), 1);
+  }, [filteredHistory]);
 
   const { engineData, sectorData, regionalData } = useMemo(() => {
     if (!portfolioData?.assets) return { engineData: [], sectorData: [], regionalData: [] };
@@ -423,7 +428,7 @@ export default function Home() {
           </div>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={filteredHistory}>
+              <AreaChart data={filteredHistory}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
                 <XAxis
                   dataKey="formattedDate"
@@ -435,27 +440,35 @@ export default function Home() {
                 />
                 <YAxis
                   hide
-                  domain={['auto', 'auto']}
+                  domain={[-maxAbsReturn, maxAbsReturn]}
                 />
                 <Tooltip
-                  contentStyle={{ backgroundColor: "#0f172a", borderColor: "#1e293b", borderRadius: "8px" }}
-                  itemStyle={{ color: "#e2e8f0" }}
-                  formatter={(value: unknown) => {
-                    const numValue = Number(value);
-                    if (isNaN(numValue)) return [String(value), 'Return'];
-                    return [`${numValue > 0 ? "+" : ""}${numValue.toFixed(2)}%`, "Return"];
+                  content={({ active, payload, label }: { active?: boolean, payload?: readonly unknown[], label?: string | number }) => {
+                    if (active && payload && payload.length) {
+                      const p = payload[0] as { value: number };
+                      const val = p.value;
+                      return (
+                        <div className="bg-slate-800 border border-slate-700 p-3 rounded-lg shadow-xl">
+                          <p className="text-slate-400 text-sm mb-1">{label}</p>
+                          <p className={`font-semibold ${val >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            Return: {val > 0 ? "+" : ""}{val.toFixed(2)}%
+                          </p>
+                        </div>
+                      );
+                    }
+                    return null;
                   }}
-                  labelStyle={{ color: "#94a3b8", marginBottom: "4px" }}
                 />
-                <Line
+                <Area
                   type="monotone"
                   dataKey="return_pct"
                   stroke="#8eabff"
-                  strokeWidth={2}
-                  dot={false}
+                  fillOpacity={0.2}
+                  fill="#8eabff"
+                  baseValue={0}
                   activeDot={{ r: 6, fill: "#8eabff", stroke: "#0f172a", strokeWidth: 2 }}
                 />
-              </LineChart>
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
