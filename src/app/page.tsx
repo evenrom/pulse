@@ -398,8 +398,6 @@ export default function Home() {
                 <span>Capital: {formatCurrency(currentMetrics.capitalProfit, currency)}</span>
                 <span>•</span>
                 <span>DRIP: {formatCurrency(currentMetrics.totalDrip, currency)}</span>
-                <span>•</span>
-                <span>Realized: {formatCurrency(currentMetrics.totalRealizedGains || 0, currency)}</span>
               </div>
             </div>
           </div>
