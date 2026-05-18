@@ -102,6 +102,7 @@ export async function GET(request: Request) {
         netInvested: netInvestedUsd,
         capitalProfit: profitMetricsUsd.capitalProfit,
         totalDrip: profitMetricsUsd.totalDrip,
+        totalRealizedGains: profitMetricsUsd.totalRealizedGains,
         netProfit: profitMetricsUsd.netProfit,
       },
       ils: {
@@ -109,6 +110,7 @@ export async function GET(request: Request) {
         netInvested: netInvestedIls,
         capitalProfit: profitMetricsIls.capitalProfit,
         totalDrip: profitMetricsIls.totalDrip,
+        totalRealizedGains: profitMetricsIls.totalRealizedGains,
         netProfit: profitMetricsIls.netProfit,
       },
       exchangeRate

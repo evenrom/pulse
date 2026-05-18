@@ -132,6 +132,7 @@ export function calculateProfitMetrics(txs: Transaction[], marketValue: number, 
   return {
     capitalProfit,
     totalDrip: metrics.totalDrip,
+    totalRealizedGains: metrics.totalRealizedGains,
     netProfit
   };
 }

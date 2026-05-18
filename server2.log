@@ -1,0 +1,19 @@
+
+> pulse-temp@0.1.0 dev
+> next dev
+
+ ⚠ Port 3000 is in use, trying 3001 instead.
+ ⚠ Port 3001 is in use, trying 3002 instead.
+ ⚠ Port 3002 is in use, trying 3003 instead.
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3003
+
+ ✓ Starting...
+ ✓ Ready in 1950ms
+ ○ Compiling / ...
+ ✓ Compiled / in 11.3s (1514 modules)
+ GET / 200 in 12091ms
+ ✓ Compiled in 940ms (744 modules)
+ ○ Compiling /api/portfolio ...
+ ✓ Compiled /api/portfolio in 7.3s (898 modules)
+ GET /api/portfolio 200 in 7594ms

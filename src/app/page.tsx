@@ -36,6 +36,7 @@ type Metrics = {
   netInvested: number;
   capitalProfit: number;
   totalDrip: number;
+  totalRealizedGains: number;
   netProfit: number;
 };
 
@@ -397,6 +398,8 @@ export default function Home() {
                 <span>Capital: {formatCurrency(currentMetrics.capitalProfit, currency)}</span>
                 <span>•</span>
                 <span>DRIP: {formatCurrency(currentMetrics.totalDrip, currency)}</span>
+                <span>•</span>
+                <span>Realized: {formatCurrency(currentMetrics.totalRealizedGains || 0, currency)}</span>
               </div>
             </div>
           </div>
@@ -603,6 +606,7 @@ export default function Home() {
                             <span>{name}</span>
                             <span className="text-blue-400">{formatCurrency(value, currency)}</span>
                           </div>
+                          <div className="text-slate-400 text-xs mt-1">Allocation: {data.pct.toFixed(1)}%</div>
                         </div>
                       );
                     }}
