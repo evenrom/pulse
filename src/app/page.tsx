@@ -432,6 +432,7 @@ export default function Home() {
               <AreaChart data={filteredHistory}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
                 <XAxis
+                  hide={true}
                   dataKey="formattedDate"
                   stroke="#94a3b8"
                   fontSize={12}
