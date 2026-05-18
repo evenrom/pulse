@@ -76,13 +76,13 @@ export default function Home() {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: curr === "usd" ? "USD" : "ILS",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
     }).format(value);
   };
 
-  const { engineData, sectorData, regionalData, flatSectorData } = useMemo(() => {
-    if (!portfolioData?.assets) return { engineData: [], sectorData: [], regionalData: [], flatSectorData: [] };
+  const { engineData, sectorData, regionalData } = useMemo(() => {
+    if (!portfolioData?.assets) return { engineData: [], sectorData: [], regionalData: [] };
 
     const sectorValues: Record<string, number> = {};
     const regionValues: Record<string, number> = {};
@@ -144,12 +144,7 @@ export default function Home() {
       .map(([name, value]) => ({ name, value, pct: (value / totalRegionVal) * 100 }))
       .sort((a, b) => b.value - a.value);
 
-    const sortedSectorData = Object.entries(sectorValues)
-      .filter(([, val]) => val > 0)
-      .map(([name, value]) => ({ name, value, pct: (value / totalSectorVal) * 100 }))
-      .sort((a, b) => b.value - a.value);
-
-    return { engineData: formattedEngineData, sectorData: formattedSectorData, regionalData: formattedRegionalData, flatSectorData: sortedSectorData };
+    return { engineData: formattedEngineData, sectorData: formattedSectorData, regionalData: formattedRegionalData };
   }, [portfolioData?.assets, currency]);
 
   const fetchPortfolio = async (currentPin: string) => {
@@ -273,6 +268,8 @@ export default function Home() {
 
   const currentMetrics = portfolioData?.metrics[currency];
 
+  const capProfitPct = currentMetrics?.netInvested ? (currentMetrics.capitalProfit / currentMetrics.netInvested) * 100 : 0;
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
@@ -361,8 +358,9 @@ export default function Home() {
               </div>
             </div>
             <div>
-              <p className={`text-3xl font-bold tracking-tight ${currentMetrics.capitalProfit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                {currentMetrics.capitalProfit >= 0 ? "+" : ""}{formatCurrency(currentMetrics.capitalProfit, currency)}
+              <p className={`text-3xl font-bold tracking-tight flex items-baseline gap-2 ${currentMetrics.capitalProfit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                <span>{currentMetrics.capitalProfit >= 0 ? "+" : ""}{formatCurrency(currentMetrics.capitalProfit, currency)}</span>
+                <span className="text-lg font-medium opacity-80">({capProfitPct >= 0 ? "+" : ""}{capProfitPct.toFixed(1)}%)</span>
               </p>
               <div className="text-sm text-slate-400 mt-2 flex items-center justify-between">
                 <span>Capital: {formatCurrency(currentMetrics.capitalProfit, currency)}</span>
@@ -428,8 +426,8 @@ export default function Home() {
                     dataKey="value"
                     cx="50%"
                     cy="50%"
-                    innerRadius={110}
-                    outerRadius={140}
+                    innerRadius="75%"
+                    outerRadius="90%"
                     stroke="none"
                   >
                     {engineData.map((entry, index) => (
@@ -442,8 +440,8 @@ export default function Home() {
                     dataKey="value"
                     cx="50%"
                     cy="50%"
-                    innerRadius={70}
-                    outerRadius={100}
+                    innerRadius="55%"
+                    outerRadius="70%"
                     stroke="none"
                   >
                     {sectorData.map((entry, index) => {
@@ -456,13 +454,45 @@ export default function Home() {
                     })}
                   </Pie>
                   <Tooltip
-                    contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b' }}
-                    itemStyle={{ color: '#e2e8f0' }}
-                    formatter={(value: unknown, name: unknown) => {
-                      const numValue = Number(value);
-                      const safeName = String(name ?? '');
-                      if (isNaN(numValue)) return [String(value), safeName];
-                      return [formatCurrency(numValue, currency), safeName];
+                    content={({ active, payload }) => {
+                      if (!active || !payload || !payload.length) return null;
+                      const data = payload[0].payload;
+                      const name = data.name;
+                      const value = Number(data.value);
+
+                      // Identify if this is an Engine (it doesn't have engineIndex)
+                      const isEngine = typeof data.engineIndex === 'undefined';
+
+                      if (isEngine) {
+                        // Find matching sub-sectors
+                        const subSectors = sectorData.filter(s => s.engine === name);
+                        return (
+                          <div className="bg-slate-900 border border-slate-800 p-3 rounded-lg shadow-xl text-sm">
+                            <div className="font-bold text-white mb-1 flex items-center justify-between gap-4">
+                              <span>{name}</span>
+                              <span className="text-blue-400">{formatCurrency(value, currency)}</span>
+                            </div>
+                            {subSectors.length > 0 && (
+                              <div className="mt-2 space-y-1 border-t border-slate-800 pt-2">
+                                {subSectors.map(s => (
+                                  <div key={s.name} className="flex items-center justify-between text-slate-300 gap-4">
+                                    <span className="truncate max-w-[120px]">{s.name}</span>
+                                    <span>{((s.value / value) * 100).toFixed(1)}%</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      // For inner ring (sectors)
+                      return (
+                        <div className="bg-slate-900 border border-slate-800 p-2 rounded-lg shadow-xl text-sm text-slate-300">
+                          <span className="font-medium text-white">{name}</span>
+                          <span className="ml-2">{formatCurrency(value, currency)}</span>
+                        </div>
+                      );
                     }}
                   />
                 </PieChart>
@@ -503,28 +533,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Chart 3: Sector Allocation */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-            <h3 className="text-xl font-bold text-white mb-6">Sector Allocation</h3>
-            <div className="h-3 w-full rounded-full flex overflow-hidden mb-4">
-              {flatSectorData.map((entry, index) => (
-                <div
-                  key={entry.name}
-                  style={{ width: `${entry.pct}%`, backgroundColor: PALETTE[index % PALETTE.length] }}
-                  title={`${entry.name}: ${entry.pct.toFixed(1)}%`}
-                />
-              ))}
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {flatSectorData.map((entry, index) => (
-                <div key={entry.name} className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PALETTE[index % PALETTE.length] }} />
-                  <span className="text-sm text-slate-300 truncate" title={entry.name}>{entry.name}</span>
-                  <span className="text-sm font-medium text-white">{entry.pct.toFixed(1)}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       )}
 
@@ -571,32 +579,50 @@ export default function Home() {
                           {formatCurrency(currency === "usd" ? asset.value_usd : asset.value_ils, currency)}
                         </td>
                       </tr>
-                      {expandedRow === asset.ticker && (
-                        <tr className="bg-slate-900/50">
-                          <td colSpan={4} className="px-6 py-4">
-                            <div className="grid grid-cols-3 gap-4 text-sm bg-slate-950 p-4 rounded-xl border border-slate-800">
-                              <div>
-                                <p className="text-slate-500 mb-1">Total Profit (%)</p>
-                                <p className={`font-medium ${(currency === "usd" ? asset.total_profit_pct_usd : asset.total_profit_pct_ils) >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                                  {(currency === "usd" ? asset.total_profit_pct_usd : asset.total_profit_pct_ils) >= 0 ? "+" : ""}{(currency === "usd" ? asset.total_profit_pct_usd : asset.total_profit_pct_ils).toFixed(2)}%
-                                </p>
+                      {expandedRow === asset.ticker && (() => {
+                        const capProfit = currency === "usd" ? asset.capital_profit_usd : asset.capital_profit_ils;
+                        const drip = currency === "usd" ? asset.drip_usd : asset.drip_ils;
+                        const val = currency === "usd" ? asset.value_usd : asset.value_ils;
+
+                        // We do the same calculation here inline to avoid adding a dependency import
+                        // However, standard logic calculation should be in finance.ts, which is added.
+                        const totalReturn = capProfit + drip;
+                        const totalCost = val - capProfit;
+                        const totalReturnPct = totalCost > 0 ? (totalReturn / totalCost) * 100 : 0;
+
+                        return (
+                          <tr className="bg-slate-900/50">
+                            <td colSpan={4} className="px-6 py-4">
+                              <div className="grid grid-cols-4 gap-4 text-sm bg-slate-950 p-4 rounded-xl border border-slate-800">
+                                <div>
+                                  <p className="text-slate-500 mb-1">Total Return (%)</p>
+                                  <p className={`font-medium ${totalReturnPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                    {totalReturnPct >= 0 ? "+" : ""}{totalReturnPct.toFixed(2)}%
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-slate-500 mb-1">Total Return</p>
+                                  <p className={`font-medium ${totalReturn >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                    {totalReturn >= 0 ? "+" : ""}{formatCurrency(totalReturn, currency)}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-slate-500 mb-1">Capital Gain</p>
+                                  <p className={`font-medium ${capProfit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                    {capProfit >= 0 ? "+" : ""}{formatCurrency(capProfit, currency)}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-slate-500 mb-1">Reinvested (DRIP)</p>
+                                  <p className="font-medium text-white">
+                                    {formatCurrency(drip, currency)}
+                                  </p>
+                                </div>
                               </div>
-                              <div>
-                                <p className="text-slate-500 mb-1">Total Profit ($)</p>
-                                <p className={`font-medium ${asset.capital_profit_usd >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                                  {asset.capital_profit_usd >= 0 ? "+" : ""}{formatCurrency(currency === "usd" ? asset.capital_profit_usd : asset.capital_profit_ils, currency)}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="text-slate-500 mb-1">Reinvested (DRIP)</p>
-                                <p className="font-medium text-white">
-                                  {formatCurrency(currency === "usd" ? asset.drip_usd : asset.drip_ils, currency)}
-                                </p>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
+                            </td>
+                          </tr>
+                        );
+                      })()}
                     </React.Fragment>
                   ))
                 )}

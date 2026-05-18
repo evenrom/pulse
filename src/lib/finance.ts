@@ -49,6 +49,25 @@ export function calculateAssetMetrics(txs: Transaction[], marketValue: number, u
 }
 
 /**
+ * Calculates Total Return and Total Return Percentage
+ * @param capitalProfit The capital profit amount
+ * @param drip The reinvested DRIP amount
+ * @param currentValue The current value of the asset
+ * @returns Object with totalReturn and totalReturnPct
+ */
+export function calculateTotalReturnMetrics(capitalProfit: number, drip: number, currentValue: number) {
+  const totalReturn = capitalProfit + drip;
+  const totalCost = currentValue - capitalProfit;
+  const totalReturnPct = totalCost > 0 ? (totalReturn / totalCost) * 100 : 0;
+
+  return {
+    totalReturn,
+    totalReturnPct,
+    totalCost
+  };
+}
+
+/**
  * Calculate Net Invested based on the Golden Formula:
  * Net Invested = Current Cost - Realized Gains
  * @param txs List of transactions
