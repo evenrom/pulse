@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 
@@ -15,7 +15,16 @@ const geistMono = localFont({
 
 export const metadata: Metadata = {
   title: "Pulse Terminal",
-  description: "Portfolio Terminal",
+  description: "Advanced Portfolio Analytics Terminal",
+  appleWebApp: {
+    title: "Pulse Terminal",
+    capable: true,
+    statusBarStyle: "black-translucent",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#070d1f",
 };
 
 export default function RootLayout({
