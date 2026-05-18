@@ -1,3 +1,14 @@
+* {
+  /* מונע את הפלאש/הצבע האפור או הלבן בלחיצה במובייל */
+  -webkit-tap-highlight-color: transparent;
+}
+
+*:focus {
+  /* מונע ריבועי פוקוס לבנים או כחולים סביב כפתורים ואלמנטים */
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
