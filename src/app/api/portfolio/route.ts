@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { assets, transactions } from "@/db/schema";
+import { assets, transactions, snapshots } from "@/db/schema";
+import { asc } from "drizzle-orm";
 import { validatePin } from "@/lib/auth";
 import {
   calculateNetInvested,
@@ -26,6 +27,7 @@ export async function GET(request: Request) {
     // 2. Fetch data from Turso
     const allAssets = await db.select().from(assets);
     const allTransactions = await db.select().from(transactions);
+    const allSnapshots = await db.select().from(snapshots).orderBy(asc(snapshots.date));
 
     // 3. Calculate Exchange Rate
     let exchangeRate = DEFAULT_USD_ILS;
@@ -112,9 +114,22 @@ export async function GET(request: Request) {
       exchangeRate
     };
 
+    // 6. Calculate History (Return %)
+    const history = allSnapshots.map(snap => {
+      const { date, total_value, net_invested } = snap;
+      const val = total_value || 0;
+      const inv = net_invested || 0;
+      const return_pct = inv > 0 ? ((val - inv) / inv) * 100 : 0;
+      return {
+        date,
+        return_pct
+      };
+    });
+
     return NextResponse.json({
       metrics,
       assets: enrichedAssets,
+      history,
     });
   } catch (error) {
     console.error("Portfolio API error:", error);

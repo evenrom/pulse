@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { Lock, RefreshCw, DollarSign, Activity, TrendingUp, AlertCircle, ArrowRight, Calculator } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { PALETTE, ENGINE_MAP, SECTOR_TO_ENGINE, GEO_BREAKDOWN, SECTOR_BREAKDOWN } from "../lib/config";
 import { calculateTotalReturnMetrics } from "../lib/finance";
 
@@ -47,6 +47,7 @@ type PortfolioData = {
   };
   assets: Asset[];
   snapshots: Snapshot[];
+  history?: { date: string; return_pct: number }[];
 };
 
 export default function Home() {
@@ -59,6 +60,8 @@ export default function Home() {
   const [portfolioData, setPortfolioData] = useState<PortfolioData | null>(null);
   const [activeTab, setActiveTab] = useState<"dashboard" | "holdings" | "simulate">("dashboard");
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+
+  const [historyFilter, setHistoryFilter] = useState<"1W" | "1M" | "1Q" | "1Y" | "ALL">("ALL");
 
   const [newCapital, setNewCapital] = useState<string>("");
   const [targetWeights, setTargetWeights] = useState<Record<string, number>>({});
@@ -81,6 +84,33 @@ export default function Home() {
       maximumFractionDigits: 1,
     }).format(value);
   };
+
+  const filteredHistory = useMemo(() => {
+    if (!portfolioData?.history) return [];
+
+    const cutoff = new Date();
+
+    if (historyFilter === "1W") cutoff.setDate(cutoff.getDate() - 7);
+    else if (historyFilter === "1M") cutoff.setMonth(cutoff.getMonth() - 1);
+    else if (historyFilter === "1Q") cutoff.setMonth(cutoff.getMonth() - 3);
+    else if (historyFilter === "1Y") cutoff.setFullYear(cutoff.getFullYear() - 1);
+    else if (historyFilter === "ALL") cutoff.setTime(0);
+
+    return portfolioData.history
+      .filter(item => new Date(item.date) >= cutoff)
+      .map(item => {
+        const dateObj = new Date(item.date);
+        return {
+          ...item,
+          formattedDate: dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        };
+      });
+  }, [portfolioData?.history, historyFilter]);
+
+  const maxAbsReturn = useMemo(() => {
+    if (!filteredHistory || filteredHistory.length === 0) return 1;
+    return Math.max(...filteredHistory.map(d => Math.abs(d.return_pct || 0)), 1);
+  }, [filteredHistory]);
 
   const { engineData, sectorData, regionalData } = useMemo(() => {
     if (!portfolioData?.assets) return { engineData: [], sectorData: [], regionalData: [] };
@@ -373,41 +403,72 @@ export default function Home() {
         </div>
       )}
 
-      {activeTab === "dashboard" && portfolioData?.snapshots && portfolioData.snapshots.length > 0 && (
+      {activeTab === "dashboard" && filteredHistory.length > 0 && (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-8">
-          <h3 className="text-xl font-bold text-white mb-6">Portfolio History</h3>
-          <div className="h-80 w-full">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
+            <div>
+              <h3 className="text-white font-semibold text-lg">Portfolio Return</h3>
+              <p className="text-slate-400 text-sm">Time-weighted historical performance</p>
+            </div>
+            <div className="flex bg-slate-950 rounded-lg p-1 border border-slate-800">
+              {(["1W", "1M", "1Q", "1Y", "ALL"] as const).map(filter => (
+                <button
+                  key={filter}
+                  onClick={() => setHistoryFilter(filter)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    historyFilter === filter
+                      ? "bg-slate-800 text-white"
+                      : "text-slate-400 hover:text-slate-300"
+                  }`}
+                >
+                  {filter}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={portfolioData.snapshots}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+              <AreaChart data={filteredHistory}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
                 <XAxis
-                  dataKey="date"
+                  dataKey="formattedDate"
                   stroke="#94a3b8"
-                  tickFormatter={(val) => new Date(val).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                  dy={10}
                 />
                 <YAxis
-                  stroke="#94a3b8"
-                  tickFormatter={(val) => `$${(val / 1000).toFixed(0)}k`}
+                  hide
+                  domain={[-maxAbsReturn, maxAbsReturn]}
                 />
                 <Tooltip
-                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b' }}
-                  itemStyle={{ color: '#e2e8f0' }}
-                  labelStyle={{ color: '#94a3b8' }}
-                  formatter={(value: unknown) => {
-                    const numValue = Number(value);
-                    if (isNaN(numValue)) return [String(value), 'Value'];
-                    return [new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(numValue), 'Value'];
+                  content={({ active, payload, label }: { active?: boolean, payload?: readonly unknown[], label?: string | number }) => {
+                    if (active && payload && payload.length) {
+                      const p = payload[0] as { value: number };
+                      const val = p.value;
+                      return (
+                        <div className="bg-slate-800 border border-slate-700 p-3 rounded-lg shadow-xl">
+                          <p className="text-slate-400 text-sm mb-1">{label}</p>
+                          <p className={`font-semibold ${val >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            Return: {val > 0 ? "+" : ""}{val.toFixed(2)}%
+                          </p>
+                        </div>
+                      );
+                    }
+                    return null;
                   }}
                 />
-                <Line
+                <Area
                   type="monotone"
-                  dataKey="total_value"
-                  stroke="#3b82f6"
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 8, fill: '#3b82f6' }}
+                  dataKey="return_pct"
+                  stroke="#8eabff"
+                  fillOpacity={0.2}
+                  fill="#8eabff"
+                  baseValue={0}
+                  activeDot={{ r: 6, fill: "#8eabff", stroke: "#0f172a", strokeWidth: 2 }}
                 />
-              </LineChart>
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
