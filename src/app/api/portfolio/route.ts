@@ -117,8 +117,8 @@ export async function GET(request: Request) {
     // 6. Calculate History (Return %)
     const history = allSnapshots.map(snap => {
       const { date, total_value, net_invested } = snap;
-      const val = total_value || 0;
-      const inv = net_invested || 0;
+      const val = Number(total_value || 0);
+      const inv = Number(net_invested || 0);
       const return_pct = inv > 0 ? ((val - inv) / inv) * 100 : 0;
       return {
         date,

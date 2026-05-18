@@ -299,7 +299,7 @@ export default function Home() {
 
   const currentMetrics = portfolioData?.metrics[currency];
 
-  const capProfitPct = currentMetrics?.netInvested ? (currentMetrics.capitalProfit / currentMetrics.netInvested) * 100 : 0;
+  const totalReturnPct = currentMetrics?.netInvested ? (currentMetrics.netProfit / currentMetrics.netInvested) * 100 : 0;
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -383,15 +383,15 @@ export default function Home() {
 
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-slate-400 font-medium">Capital Profit</h3>
+              <h3 className="text-slate-400 font-medium">Total Return</h3>
               <div className="p-2 bg-emerald-500/10 rounded-lg">
                 <TrendingUp className="w-5 h-5 text-emerald-500" />
               </div>
             </div>
             <div>
-              <p className={`text-3xl font-bold tracking-tight flex items-baseline gap-2 ${currentMetrics.capitalProfit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                <span>{currentMetrics.capitalProfit >= 0 ? "+" : ""}{formatCurrency(currentMetrics.capitalProfit, currency)}</span>
-                <span className="text-lg font-medium opacity-80">({capProfitPct >= 0 ? "+" : ""}{capProfitPct.toFixed(1)}%)</span>
+              <p className={`text-3xl font-bold tracking-tight flex items-baseline gap-2 ${currentMetrics.netProfit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                <span>{currentMetrics.netProfit >= 0 ? "+" : ""}{formatCurrency(currentMetrics.netProfit, currency)}</span>
+                <span className="text-lg font-medium opacity-80">({totalReturnPct >= 0 ? "+" : ""}{totalReturnPct.toFixed(1)}%)</span>
               </p>
               <div className="text-sm text-slate-400 mt-2 flex items-center justify-between">
                 <span>Capital: {formatCurrency(currentMetrics.capitalProfit, currency)}</span>
@@ -475,7 +475,7 @@ export default function Home() {
       )}
 
       {activeTab === "dashboard" && portfolioData?.assets && portfolioData.assets.length > 0 && (
-        <div className="space-y-6 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           {/* Chart 1: Growth Drivers */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
             <h3 className="text-xl font-bold text-white mb-6">Growth Drivers</h3>
@@ -502,7 +502,7 @@ export default function Home() {
                     dataKey="value"
                     cx="50%"
                     cy="50%"
-                    innerRadius="55%"
+                    innerRadius="60%"
                     outerRadius="70%"
                     stroke="none"
                   >
@@ -575,16 +575,42 @@ export default function Home() {
           {/* Chart 2: Regional Split */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
             <h3 className="text-xl font-bold text-white mb-6">Regional Split</h3>
-            <div className="h-3 w-full rounded-full flex overflow-hidden mb-4">
-              {regionalData.map((entry, index) => (
-                <div
-                  key={entry.name}
-                  style={{ width: `${entry.pct}%`, backgroundColor: PALETTE[index % PALETTE.length] }}
-                  title={`${entry.name}: ${entry.pct.toFixed(1)}%`}
-                />
-              ))}
+            <div className="h-80 w-full flex items-center justify-center">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={regionalData}
+                    dataKey="value"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius="75%"
+                    outerRadius="90%"
+                    stroke="none"
+                  >
+                    {regionalData.map((entry, index) => (
+                      <Cell key={`region-${index}`} fill={PALETTE[index % PALETTE.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload || !payload.length) return null;
+                      const data = payload[0].payload;
+                      const name = data.name;
+                      const value = Number(data.value);
+                      return (
+                        <div className="bg-slate-900 border border-slate-800 p-3 rounded-lg shadow-xl text-sm">
+                          <div className="font-bold text-white flex items-center justify-between gap-4">
+                            <span>{name}</span>
+                            <span className="text-blue-400">{formatCurrency(value, currency)}</span>
+                          </div>
+                        </div>
+                      );
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
               {regionalData.map((entry, index) => (
                 <div key={entry.name} className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PALETTE[index % PALETTE.length] }} />
