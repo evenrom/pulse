@@ -6,6 +6,7 @@ import { db } from '@/db';
 import { assets, transactions, snapshots } from '@/db/schema';
 import { calculateHoldings, calculateNetInvested } from '@/lib/finance';
 import { eq } from 'drizzle-orm';
+import { validatePin } from '@/lib/auth';
 
 async function runSync() {
   // Fetch transactions and calculate holdings early
@@ -90,7 +91,19 @@ async function runSync() {
 
 function verifyCronAuth(request: NextRequest): NextResponse | null {
   const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  const hasValidCron = authHeader === `Bearer ${process.env.CRON_SECRET}`;
+
+  const pinHeader = request.headers.get('x-pin');
+  let hasValidPin = false;
+  if (pinHeader) {
+    try {
+      hasValidPin = validatePin(pinHeader);
+    } catch {
+      hasValidPin = false;
+    }
+  }
+
+  if (!hasValidCron && !hasValidPin) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
   }
   return null;
