@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { assets, transactions, snapshots } from '@/db/schema';
 import { calculateHoldings, calculateNetInvested } from '@/lib/finance';
@@ -48,6 +48,9 @@ async function runSync() {
         await db.update(assets)
           .set({ current_price: newPrice, updated_at: Date.now().toString() })
           .where(eq(assets.ticker, asset.ticker));
+
+        // Update local object to avoid a second DB read
+        asset.current_price = newPrice;
       } else {
         console.error(`Invalid quote data for ${asset.ticker}:`, data);
       }
@@ -56,11 +59,9 @@ async function runSync() {
     }
   }
 
-  // 3. Calculate new total market value and net invested
-  const updatedAssets = await db.select().from(assets);
-
+  // 3. Calculate new total market value and net invested locally
   let totalMarketValue = 0;
-  for (const asset of updatedAssets) {
+  for (const asset of allAssets) {
     if (asset.ticker && asset.current_price && holdings[asset.ticker]) {
       totalMarketValue += asset.current_price * holdings[asset.ticker];
     }
@@ -87,8 +88,19 @@ async function runSync() {
   return { success: true, message: 'Sync completed successfully.' };
 }
 
-export async function POST() {
+function verifyCronAuth(request: NextRequest): NextResponse | null {
+  const authHeader = request.headers.get('authorization');
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+  }
+  return null;
+}
+
+export async function POST(request: NextRequest) {
   try {
+    const authError = verifyCronAuth(request);
+    if (authError) return authError;
+
     const result = await runSync();
     return NextResponse.json(result, { status: 200 });
   } catch (error: unknown) {
@@ -100,8 +112,11 @@ export async function POST() {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const authError = verifyCronAuth(request);
+    if (authError) return authError;
+
     const result = await runSync();
     return NextResponse.json(result, { status: 200 });
   } catch (error: unknown) {
