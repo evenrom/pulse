@@ -24,34 +24,40 @@ export async function POST(request: NextRequest) {
 
     let insertedCount = 0;
 
-    await db.transaction(async (tx) => {
-      // Wipe old data
-      await tx.delete(transactions);
-      await tx.delete(snapshots);
+    try {
+      await db.transaction(async (tx) => {
+        // Wipe old data
+        await tx.delete(transactions);
+        await tx.delete(snapshots);
 
-      // Map to db schema and insert
-      const insertData = jsonTransactions.map((t: Record<string, unknown>) => ({
-        id: crypto.randomUUID(),
-        date: typeof t.date === "string" ? t.date : new Date().toISOString(),
-        ticker: typeof t.ticker === "string" ? t.ticker : "UNKNOWN",
-        action: ["BUY", "SELL", "DRIP"].includes(t.action as string) ? (t.action as "BUY" | "SELL" | "DRIP") : "BUY",
-        quantity: Number(t.quantity) || 0,
-        price: Number(t.price) || 0,
-        fees: Number(t.fees) || 0,
-        total_amount: Number(t.total_amount) || 0,
-        historic_rate: Number(t.historic_rate) || DEFAULT_HISTORIC_RATE,
-        realized_pl: Number(t.realized_pl) || 0,
-        created_at: new Date().toISOString(),
-      }));
+        // Map to db schema and insert
+        const insertData = jsonTransactions.map((t: Record<string, unknown>) => ({
+          id: crypto.randomUUID(),
+          date: typeof t.date === "string" ? t.date : new Date().toISOString(),
+          ticker: typeof t.ticker === "string" ? t.ticker : "UNKNOWN",
+          action: ["BUY", "SELL", "DRIP"].includes(t.action as string) ? (t.action as "BUY" | "SELL" | "DRIP") : "BUY",
+          quantity: Number(t.quantity) || 0,
+          price: Number(t.price) || 0,
+          fees: Number(t.fees) || 0,
+          total_amount: Number(t.total_amount) || 0,
+          historic_rate: Number(t.historic_rate) || DEFAULT_HISTORIC_RATE,
+          realized_pl: Number(t.realized_pl) || 0,
+          created_at: new Date().toISOString(),
+        }));
 
-      if (insertData.length > 0) {
-        await tx.insert(transactions).values(insertData);
-        insertedCount = insertData.length;
-      }
+        if (insertData.length > 0) {
+          await tx.insert(transactions).values(insertData);
+          insertedCount = insertData.length;
+        }
 
-      // Call shared utility to rebuild snapshots using the transaction runner
-      await rebuildHistoricalSnapshots(tx);
-    });
+        // Call shared utility to rebuild snapshots using the transaction runner
+        await rebuildHistoricalSnapshots(tx);
+      });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (error: any) {
+      console.error("SEEDING_ERROR_DETAILED:", error);
+      return NextResponse.json({ error: error.message, stack: error.stack }, { status: 500 });
+    }
 
     return NextResponse.json({ success: true, insertedTransactions: insertedCount });
   } catch (error) {
