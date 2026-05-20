@@ -1,3 +1,4 @@
+import { unstable_noStore as noStore } from "next/cache";
 import { transactions, assets, snapshots } from "@/db/schema";
 import { InferSelectModel, sql } from "drizzle-orm";
 import { SQLiteTransaction } from "drizzle-orm/sqlite-core";
@@ -145,8 +146,10 @@ export async function rebuildHistoricalSnapshots(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   tx: SQLiteTransaction<"async", any, any, any> | LibSQLDatabase<any>
 ) {
-  const allTxs = (await tx.select().from(transactions)) as Transaction[];
-  const allAssets = (await tx.select().from(assets)) as Asset[];
+  noStore();
+
+  const allTxs = (await tx.select().from(transactions).all()) as Transaction[];
+  const allAssets = (await tx.select().from(assets).all()) as Asset[];
 
   const sortedTxs = [...allTxs].sort((a, b) => {
     const timeA = new Date(a.date || "").getTime();
