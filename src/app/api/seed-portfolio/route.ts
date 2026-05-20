@@ -31,16 +31,19 @@ export async function POST(request: NextRequest) {
         await tx.delete(snapshots);
 
         // Extract unique tickers
-        const uniqueTickers = Array.from(new Set(jsonTransactions.map((t: Record<string, unknown>) => typeof t.ticker === "string" ? t.ticker : "UNKNOWN")));
+        const uniqueTickers = Array.from(
+          new Set(
+            jsonTransactions
+              .map((t: Record<string, unknown>) => t.ticker)
+              .filter((ticker): ticker is string => typeof ticker === "string")
+          )
+        );
 
         // Pre-seed missing assets to avoid FK constraints
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const uniqueAssetsData: any[] = uniqueTickers.map((ticker) => ({
-          id: crypto.randomUUID(),
+        const uniqueAssetsData = uniqueTickers.map((ticker) => ({
           ticker: ticker,
           name: ticker,
           current_price: 0,
-          created_at: new Date().toISOString(),
         }));
 
         if (uniqueAssetsData.length > 0) {
