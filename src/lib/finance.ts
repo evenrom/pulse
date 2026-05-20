@@ -1,5 +1,5 @@
-import { transactions, assets } from "@/db/schema";
-import { InferSelectModel } from "drizzle-orm";
+import { transactions, assets, snapshots } from "@/db/schema";
+import { InferSelectModel, sql } from "drizzle-orm";
 
 export type Transaction = InferSelectModel<typeof transactions>;
 export type Asset = InferSelectModel<typeof assets>;
@@ -132,4 +132,57 @@ export function calculateProfitMetrics(txs: Transaction[], marketValue: number, 
     totalRealizedGains: metrics.totalRealizedGains,
     netProfit: metrics.netProfit
   };
+}
+
+/**
+ * Centralized utility to rebuild historical snapshots for every distinct
+ * transaction date based on the current transactions in the database.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function rebuildHistoricalSnapshots(db: any) {
+  const allTxs = (await db.select().from(transactions)) as Transaction[];
+  const allAssets = await db.select().from(assets);
+
+  const sortedTxs = [...allTxs].sort((a, b) => new Date(a.date || "").getTime() - new Date(b.date || "").getTime());
+  const dates = Array.from(new Set(sortedTxs.map(t => {
+      try { return new Date(t.date || "").toISOString().split("T")[0]; }
+      catch { return "1970-01-01"; }
+  })));
+
+  const snapshotValues = [];
+  for (const date of dates) {
+    const txsOnOrBeforeDate = sortedTxs.filter(t => {
+       try { return new Date(t.date || "").toISOString().split("T")[0] <= date; }
+       catch { return false; }
+    });
+
+    const netInvested = calculateNetInvested(txsOnOrBeforeDate);
+    const holdings = calculateHoldings(txsOnOrBeforeDate);
+
+    let totalMarketValue = 0;
+    for (const asset of allAssets) {
+      if (asset.ticker && asset.current_price && holdings[asset.ticker]) {
+        totalMarketValue += asset.current_price * holdings[asset.ticker];
+      }
+    }
+
+    snapshotValues.push({
+      date,
+      total_value: totalMarketValue,
+      net_invested: netInvested,
+    });
+  }
+
+  if (snapshotValues.length > 0) {
+    // Perform individual inserts to avoid bulk limitations and sqlite limitations
+    for (const snap of snapshotValues) {
+        await db.insert(snapshots).values(snap).onConflictDoUpdate({
+            target: snapshots.date,
+            set: {
+              net_invested: sql`excluded.net_invested`,
+              total_value: sql`excluded.total_value`
+            }
+        });
+    }
+  }
 }
