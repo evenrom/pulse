@@ -32,7 +32,7 @@ export async function GET(request: Request) {
     // 3. Calculate Exchange Rate
     let exchangeRate = DEFAULT_USD_ILS;
     try {
-      const exRes = await fetch(EXCHANGE_RATE_API_URL);
+      const exRes = await fetch(EXCHANGE_RATE_API_URL, { cache: "no-store" });
       if (exRes.ok) {
         const exData = await exRes.json();
         if (exData && exData.rates && exData.rates.ILS) {
