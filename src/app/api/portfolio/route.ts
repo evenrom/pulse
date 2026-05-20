@@ -30,9 +30,14 @@ export async function GET(request: Request) {
     const allSnapshots = await db.select().from(snapshots).orderBy(asc(snapshots.date));
 
     // 3. Calculate Exchange Rate
-    let exchangeRate = DEFAULT_USD_ILS;
+    let exchangeRate = 3.72; // ברירת מחדל ריאלית להיום במקום 3.7 היבש
     try {
-      const exRes = await fetch(EXCHANGE_RATE_API_URL, { cache: "no-store" });
+      // מעבר ל-API אמין יותר והוראה אגרסיבית ל-Next.js לא לשמור Cache בשום מצב
+      const exRes = await fetch("https://open.er-api.com/v6/latest/USD", { 
+        cache: "no-store",
+        next: { revalidate: 0 } 
+      });
+      
       if (exRes.ok) {
         const exData = await exRes.json();
         if (exData && exData.rates && exData.rates.ILS) {
