@@ -13,6 +13,30 @@ export type Asset = InferSelectModel<typeof assets>;
  * @param useHistoricRate If true, applies tx.historic_rate to calculations
  * @returns Object with netInvested, capitalProfit, totalDrip, totalRealizedGains, and netProfit
  */
+/**
+ * Calculate Net Invested based on the Golden Formula:
+ * Net Invested = Current Cost - Realized Gains
+ * @param txs List of transactions
+ * @param useHistoricRate If true, applies tx.historic_rate to calculations
+ * @returns Total Net Invested
+ */
+export function calculateNetInvested(txs: Transaction[], useHistoricRate = false): number {
+  let netInvested = 0;
+
+  for (const tx of txs) {
+    const rate = useHistoricRate ? (tx.historic_rate || 1) : 1;
+    const amount = Math.abs(Number(tx.total_amount || 0)) * rate;
+
+    if (tx.action === "BUY") {
+      netInvested += amount;
+    } else if (tx.action === "SELL") {
+      const costBasis = amount - ((tx.realized_pl || 0) * rate);
+      netInvested -= costBasis;
+    }
+  }
+  return netInvested;
+}
+
 export function calculateAssetMetrics(txs: Transaction[], marketValue: number, useHistoricRate = false) {
   let currentCost = 0;
   let totalRealizedGains = 0;
@@ -65,17 +89,6 @@ export function calculateTotalReturnMetrics(capitalProfit: number, drip: number,
     totalReturnPct,
     netInvested
   };
-}
-
-/**
- * Calculate Net Invested based on the Golden Formula:
- * Net Invested = Current Cost - Realized Gains
- * @param txs List of transactions
- * @param useHistoricRate If true, applies tx.historic_rate to calculations
- * @returns Total Net Invested
- */
-export function calculateNetInvested(txs: Transaction[], useHistoricRate = false): number {
-  return calculateAssetMetrics(txs, 0, useHistoricRate).netInvested;
 }
 
 /**
