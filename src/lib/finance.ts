@@ -13,15 +13,10 @@ export type Asset = InferSelectModel<typeof assets>;
  * @param useHistoricRate If true, applies tx.historic_rate to calculations
  * @returns Object with netInvested, capitalProfit, totalDrip, totalRealizedGains, and netProfit
  */
-/**
- * Calculate Net Invested based on the Golden Formula:
- * Net Invested = Current Cost - Realized Gains
- * @param txs List of transactions
- * @param useHistoricRate If true, applies tx.historic_rate to calculations
- * @returns Total Net Invested
- */
-export function calculateNetInvested(txs: Transaction[], useHistoricRate = false): number {
+export function calculateAssetMetrics(txs: Transaction[], marketValue: number, useHistoricRate = false) {
   let netInvested = 0;
+  let totalRealizedGains = 0;
+  let totalDrip = 0;
 
   for (const tx of txs) {
     const rate = useHistoricRate ? (tx.historic_rate || 1) : 1;
@@ -32,36 +27,15 @@ export function calculateNetInvested(txs: Transaction[], useHistoricRate = false
     } else if (tx.action === "SELL") {
       const costBasis = amount - ((tx.realized_pl || 0) * rate);
       netInvested -= costBasis;
-    }
-  }
-  return netInvested;
-}
-
-export function calculateAssetMetrics(txs: Transaction[], marketValue: number, useHistoricRate = false) {
-  let currentCost = 0;
-  let totalRealizedGains = 0;
-  let totalDrip = 0;
-
-  for (const tx of txs) {
-    const rate = useHistoricRate ? (tx.historic_rate || 1) : 1;
-    const amount = Math.abs(Number(tx.total_amount || 0)) * rate;
-
-    if (tx.action === "BUY" || tx.action === "DRIP") {
-      currentCost += amount;
-    } else if (tx.action === "SELL") {
-      currentCost -= amount;
-    }
-
-    if (tx.action === "DRIP") {
+    } else if (tx.action === "DRIP") {
       totalDrip += amount;
     }
 
     totalRealizedGains += (tx.realized_pl || 0) * rate;
   }
 
-  const netInvested = currentCost + totalRealizedGains;
-  const capitalProfit = marketValue - netInvested;
-  const netProfit = capitalProfit + totalRealizedGains + totalDrip;
+  const netProfit = (marketValue + totalRealizedGains) - netInvested;
+  const capitalProfit = netProfit - totalDrip - totalRealizedGains;
 
   return {
     netInvested,
@@ -70,6 +44,17 @@ export function calculateAssetMetrics(txs: Transaction[], marketValue: number, u
     totalRealizedGains,
     netProfit
   };
+}
+
+/**
+ * Calculate Net Invested based on the Golden Formula:
+ * Net Invested = Current Cost - Realized Gains
+ * @param txs List of transactions
+ * @param useHistoricRate If true, applies tx.historic_rate to calculations
+ * @returns Total Net Invested
+ */
+export function calculateNetInvested(txs: Transaction[], useHistoricRate = false): number {
+  return calculateAssetMetrics(txs, 0, useHistoricRate).netInvested;
 }
 
 /**
@@ -137,15 +122,14 @@ export function calculateHoldings(txs: Transaction[]): Record<string, number> {
  * @returns Object with capitalProfit and drip totals
  */
 export function calculateProfitMetrics(txs: Transaction[], marketValue: number, netInvested: number, useHistoricRate = false) {
-  // Provided for backward compatibility; better to use calculateAssetMetrics directly
+  // Since calculateAssetMetrics now derives netInvested, we only pass marketValue to it to get the correct metrics.
+  // The provided netInvested argument is not used internally for profit calculation anymore, keeping signature backward compatible.
   const metrics = calculateAssetMetrics(txs, marketValue, useHistoricRate);
-  // Re-adjust capital profit using passed netInvested parameter to match previous signature
-  const capitalProfit = marketValue - netInvested;
-  const netProfit = capitalProfit + metrics.totalRealizedGains + metrics.totalDrip;
+
   return {
-    capitalProfit,
+    capitalProfit: metrics.capitalProfit,
     totalDrip: metrics.totalDrip,
     totalRealizedGains: metrics.totalRealizedGains,
-    netProfit
+    netProfit: metrics.netProfit
   };
 }
