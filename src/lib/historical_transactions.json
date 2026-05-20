@@ -1,59 +1,5 @@
 [
   {
-    "date": "2025-03-11T00:00:00.000Z",
-    "ticker": "SGOV",
-    "action": "BUY",
-    "quantity": 3.982,
-    "price": 100.45,
-    "total_amount": 399.99,
-    "realized_pl": 0.0
-  },
-  {
-    "date": "2025-10-01T00:00:00.000Z",
-    "ticker": "SGOV",
-    "action": "BUY",
-    "quantity": 0.0298,
-    "price": 100.38,
-    "total_amount": 2.99,
-    "realized_pl": 0.0
-  },
-  {
-    "date": "2025-10-07T00:00:00.000Z",
-    "ticker": "SGOV",
-    "action": "DRIP",
-    "quantity": 0.0102,
-    "price": 100.44,
-    "total_amount": 1.02,
-    "realized_pl": 0.0
-  },
-  {
-    "date": "2025-11-07T00:00:00.000Z",
-    "ticker": "SGOV",
-    "action": "DRIP",
-    "quantity": 0.0104,
-    "price": 100.46,
-    "total_amount": 1.04,
-    "realized_pl": 0.0
-  },
-  {
-    "date": "2025-12-05T00:00:00.000Z",
-    "ticker": "SGOV",
-    "action": "DRIP",
-    "quantity": 0.0093,
-    "price": 100.45,
-    "total_amount": 0.93,
-    "realized_pl": 0.0
-  },
-  {
-    "date": "2025-12-26T00:00:00.000Z",
-    "ticker": "SGOV",
-    "action": "DRIP",
-    "quantity": 0.0097,
-    "price": 100.34,
-    "total_amount": 0.97,
-    "realized_pl": 0.0
-  },
-  {
     "date": "2026-01-26T00:00:00.000Z",
     "ticker": "VOO",
     "action": "BUY",
