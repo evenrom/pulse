@@ -12,10 +12,6 @@ import {
 // Force dynamic execution for this route to prevent Next.js from prerendering it statically.
 export const dynamic = "force-dynamic";
 
-// A public API for latest exchange rates (example: fallback to 1 USD = 3.7 ILS if API fails)
-const EXCHANGE_RATE_API_URL = "https://api.exchangerate-api.com/v4/latest/USD";
-const DEFAULT_USD_ILS = 3.7;
-
 export async function GET(request: Request) {
   try {
     // 1. PIN Validation
