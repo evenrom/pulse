@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { validatePin } from "@/lib/auth";
 import { db } from "@/db";
-import { transactions, snapshots } from "@/db/schema";
+import { transactions, snapshots, assets } from "@/db/schema";
 import crypto from "crypto";
 import { rebuildHistoricalSnapshots } from "@/lib/finance";
 
@@ -29,6 +29,26 @@ export async function POST(request: NextRequest) {
         // Wipe old data
         await tx.delete(transactions);
         await tx.delete(snapshots);
+
+        // Extract unique tickers
+        const uniqueTickers = Array.from(
+          new Set(
+            jsonTransactions
+              .map((t: Record<string, unknown>) => t.ticker)
+              .filter((ticker): ticker is string => typeof ticker === "string")
+          )
+        );
+
+        // Pre-seed missing assets to avoid FK constraints
+        const uniqueAssetsData = uniqueTickers.map((ticker) => ({
+          ticker: ticker,
+          name: ticker,
+          current_price: 0,
+        }));
+
+        if (uniqueAssetsData.length > 0) {
+          await tx.insert(assets).values(uniqueAssetsData).onConflictDoNothing();
+        }
 
         // Map to db schema and insert
         const insertData = jsonTransactions.map((t: Record<string, unknown>) => ({
