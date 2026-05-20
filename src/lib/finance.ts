@@ -1,5 +1,7 @@
 import { transactions, assets, snapshots } from "@/db/schema";
 import { InferSelectModel, sql } from "drizzle-orm";
+import { SQLiteTransaction } from "drizzle-orm/sqlite-core";
+import { LibSQLDatabase } from "drizzle-orm/libsql";
 
 export type Transaction = InferSelectModel<typeof transactions>;
 export type Asset = InferSelectModel<typeof assets>;
@@ -139,26 +141,86 @@ export function calculateProfitMetrics(txs: Transaction[], marketValue: number, 
  * transaction date based on the current transactions in the database.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function rebuildHistoricalSnapshots(db: any) {
-  const allTxs = (await db.select().from(transactions)) as Transaction[];
-  const allAssets = await db.select().from(assets);
+export async function rebuildHistoricalSnapshots(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tx: SQLiteTransaction<"async", any, any, any> | LibSQLDatabase<any>
+) {
+  const allTxs = (await tx.select().from(transactions)) as Transaction[];
+  const allAssets = (await tx.select().from(assets)) as Asset[];
 
-  const sortedTxs = [...allTxs].sort((a, b) => new Date(a.date || "").getTime() - new Date(b.date || "").getTime());
-  const dates = Array.from(new Set(sortedTxs.map(t => {
-      try { return new Date(t.date || "").toISOString().split("T")[0]; }
-      catch { return "1970-01-01"; }
-  })));
+  const sortedTxs = [...allTxs].sort((a, b) => {
+    const timeA = new Date(a.date || "").getTime();
+    const timeB = new Date(b.date || "").getTime();
 
-  const snapshotValues = [];
-  for (const date of dates) {
-    const txsOnOrBeforeDate = sortedTxs.filter(t => {
-       try { return new Date(t.date || "").toISOString().split("T")[0] <= date; }
-       catch { return false; }
-    });
+    // Safely handle invalid or missing dates
+    const isAValid = !Number.isNaN(timeA);
+    const isBValid = !Number.isNaN(timeB);
 
-    const netInvested = calculateNetInvested(txsOnOrBeforeDate);
-    const holdings = calculateHoldings(txsOnOrBeforeDate);
+    if (isAValid && isBValid) return timeA - timeB;
+    if (isAValid) return -1;
+    if (isBValid) return 1;
+    return 0;
+  });
 
+  const snapshotValues: { date: string; total_value: number; net_invested: number }[] = [];
+
+  let netInvested = 0;
+  const holdings: Record<string, number> = {};
+
+  let currentDate = "";
+
+  for (const t of sortedTxs) {
+    let tDateStr = "";
+    try {
+      const dt = new Date(t.date || "");
+      if (Number.isNaN(dt.getTime())) throw new Error("Invalid");
+      tDateStr = dt.toISOString().split("T")[0];
+    } catch {
+      tDateStr = "1970-01-01";
+    }
+
+    // If we've moved to a new date, finalize the previous date's snapshot
+    if (currentDate && tDateStr !== currentDate) {
+      let totalMarketValue = 0;
+      for (const asset of allAssets) {
+        if (asset.ticker && asset.current_price && holdings[asset.ticker]) {
+          totalMarketValue += asset.current_price * holdings[asset.ticker];
+        }
+      }
+
+      snapshotValues.push({
+        date: currentDate,
+        total_value: totalMarketValue,
+        net_invested: netInvested,
+      });
+    }
+
+    currentDate = tDateStr;
+
+    // Update running state
+    const rate = 1; // Assuming historic rate is 1 for default metrics like `calculateAssetMetrics` does by default
+    const amount = Math.abs(Number(t.total_amount || 0)) * rate;
+
+    if (t.action === "BUY") {
+      netInvested += amount;
+      if (t.ticker && t.quantity != null) {
+        holdings[t.ticker] = (holdings[t.ticker] || 0) + t.quantity;
+      }
+    } else if (t.action === "SELL") {
+      const costBasis = amount - ((t.realized_pl || 0) * rate);
+      netInvested -= costBasis;
+      if (t.ticker && t.quantity != null) {
+        holdings[t.ticker] = (holdings[t.ticker] || 0) - t.quantity;
+      }
+    } else if (t.action === "DRIP") {
+      if (t.ticker && t.quantity != null) {
+        holdings[t.ticker] = (holdings[t.ticker] || 0) + t.quantity;
+      }
+    }
+  }
+
+  // Push the final date
+  if (currentDate) {
     let totalMarketValue = 0;
     for (const asset of allAssets) {
       if (asset.ticker && asset.current_price && holdings[asset.ticker]) {
@@ -167,22 +229,19 @@ export async function rebuildHistoricalSnapshots(db: any) {
     }
 
     snapshotValues.push({
-      date,
+      date: currentDate,
       total_value: totalMarketValue,
       net_invested: netInvested,
     });
   }
 
   if (snapshotValues.length > 0) {
-    // Perform individual inserts to avoid bulk limitations and sqlite limitations
-    for (const snap of snapshotValues) {
-        await db.insert(snapshots).values(snap).onConflictDoUpdate({
-            target: snapshots.date,
-            set: {
-              net_invested: sql`excluded.net_invested`,
-              total_value: sql`excluded.total_value`
-            }
-        });
-    }
+    await tx.insert(snapshots).values(snapshotValues).onConflictDoUpdate({
+      target: snapshots.date,
+      set: {
+        net_invested: sql`excluded.net_invested`,
+        total_value: sql`excluded.total_value`
+      }
+    });
   }
 }
