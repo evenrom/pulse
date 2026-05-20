@@ -383,7 +383,7 @@ export default function Home() {
                 <span>{currentMetrics.netProfit >= 0 ? "+" : ""}{formatCurrency(currentMetrics.netProfit, currency)}</span>
                 <span className="text-lg font-medium opacity-80">({totalReturnPct >= 0 ? "+" : ""}{totalReturnPct.toFixed(1)}%)</span>
               </p>
-              <div className="text-sm text-slate-400 mt-2 flex items-center justify-between">
+              <div className="text-sm text-slate-400 mt-2 flex items-center justify-start gap-x-6 flex-wrap">
                 <span>Capital: {formatCurrency(currentMetrics.capitalProfit, currency)}</span>
                 <span>•</span>
                 <span>DRIP: {formatCurrency(currentMetrics.totalDrip, currency)}</span>
