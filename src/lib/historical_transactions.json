@@ -1,0 +1,254 @@
+[
+  {
+    "date": "2026-01-26T00:00:00.000Z",
+    "ticker": "VOO",
+    "action": "BUY",
+    "quantity": 0.2445,
+    "price": 635.08,
+    "total_amount": 156.48,
+    "realized_pl": 0.0
+  },
+  {
+    "date": "2026-01-26T00:00:00.000Z",
+    "ticker": "SGOV",
+    "action": "BUY",
+    "quantity": 9.3927,
+    "price": 100.62,
+    "total_amount": 945.09,
+    "realized_pl": 0.0
+  },
+  {
+    "date": "2026-01-26T00:00:00.000Z",
+    "ticker": "IAU",
+    "action": "BUY",
+    "quantity": 0.853,
+    "price": 95.81,
+    "total_amount": 81.73,
+    "realized_pl": 0.0
+  },
+  {
+    "date": "2026-01-26T00:00:00.000Z",
+    "ticker": "USMV",
+    "action": "BUY",
+    "quantity": 3.32,
+    "price": 95.12,
+    "total_amount": 315.8,
+    "realized_pl": 0.0
+  },
+  {
+    "date": "2026-01-26T00:00:00.000Z",
+    "ticker": "VEU",
+    "action": "BUY",
+    "quantity": 1.001,
+    "price": 77.92,
+    "total_amount": 77.92,
+    "realized_pl": 0.0
+  },
+  {
+    "date": "2026-02-06T00:00:00.000Z",
+    "ticker": "SGOV",
+    "action": "DRIP",
+    "quantity": 0.0216,
+    "price": 100.44,
+    "total_amount": 2.17,
+    "realized_pl": 0.0
+  },
+  {
+    "date": "2026-02-10T00:00:00.000Z",
+    "ticker": "VOO",
+    "action": "SELL",
+    "quantity": 0.111,
+    "price": 639.87,
+    "total_amount": 71.03,
+    "realized_pl": -0.01
+  },
+  {
+    "date": "2026-02-10T00:00:00.000Z",
+    "ticker": "VEU",
+    "action": "SELL",
+    "quantity": 1.001,
+    "price": 80.56,
+    "total_amount": 80.64,
+    "realized_pl": 2.72
+  },
+  {
+    "date": "2026-02-10T00:00:00.000Z",
+    "ticker": "EFAV",
+    "action": "BUY",
+    "quantity": 2.0461,
+    "price": 92.86,
+    "total_amount": 190.0,
+    "realized_pl": 0.0
+  },
+  {
+    "date": "2026-02-10T00:00:00.000Z",
+    "ticker": "IDEV",
+    "action": "BUY",
+    "quantity": 0.947,
+    "price": 89.75,
+    "total_amount": 84.99,
+    "realized_pl": 0.0
+  },
+  {
+    "date": "2026-02-10T00:00:00.000Z",
+    "ticker": "USMV",
+    "action": "SELL",
+    "quantity": 1.9636,
+    "price": 96.1,
+    "total_amount": 188.7,
+    "realized_pl": 1.92
+  },
+  {
+    "date": "2026-02-10T00:00:00.000Z",
+    "ticker": "SGOV",
+    "action": "BUY",
+    "quantity": 2.1304,
+    "price": 100.46,
+    "total_amount": 214.02,
+    "realized_pl": 0.0
+  },
+  {
+    "date": "2026-03-06T00:00:00.000Z",
+    "ticker": "SGOV",
+    "action": "DRIP",
+    "quantity": 0.0233,
+    "price": 100.45,
+    "total_amount": 2.34,
+    "realized_pl": 0.0
+  },
+  {
+    "date": "2026-03-11T00:00:00.000Z",
+    "ticker": "IAU",
+    "action": "BUY",
+    "quantity": 0.1145,
+    "price": 97.35,
+    "total_amount": 11.15,
+    "realized_pl": 0.0
+  },
+  {
+    "date": "2026-03-11T00:00:00.000Z",
+    "ticker": "IDEV",
+    "action": "BUY",
+    "quantity": 0.1407,
+    "price": 85.28,
+    "total_amount": 12.0,
+    "realized_pl": 0.0
+  },
+  {
+    "date": "2026-03-11T00:00:00.000Z",
+    "ticker": "VOO",
+    "action": "BUY",
+    "quantity": 0.0177,
+    "price": 621.55,
+    "total_amount": 11.01,
+    "realized_pl": 0.0
+  },
+  {
+    "date": "2026-03-11T00:00:00.000Z",
+    "ticker": "USMV",
+    "action": "BUY",
+    "quantity": 0.1258,
+    "price": 95.41,
+    "total_amount": 12.0,
+    "realized_pl": 0.0
+  },
+  {
+    "date": "2026-03-11T00:00:00.000Z",
+    "ticker": "SGOV",
+    "action": "BUY",
+    "quantity": 1.5426,
+    "price": 100.48,
+    "total_amount": 155.0,
+    "realized_pl": 0.0
+  },
+  {
+    "date": "2026-03-23T00:00:00.000Z",
+    "ticker": "USMV",
+    "action": "DRIP",
+    "quantity": 0.0046,
+    "price": 93.13,
+    "total_amount": 0.43,
+    "realized_pl": 0.0
+  },
+  {
+    "date": "2026-04-01T00:00:00.000Z",
+    "ticker": "VOO",
+    "action": "DRIP",
+    "quantity": 0.0003,
+    "price": 602.23,
+    "total_amount": 0.18,
+    "realized_pl": 0.0
+  },
+  {
+    "date": "2026-04-08T00:00:00.000Z",
+    "ticker": "SGOV",
+    "action": "DRIP",
+    "quantity": 0.0286,
+    "price": 100.46,
+    "total_amount": 2.87,
+    "realized_pl": 0.0
+  },
+  {
+    "date": "2026-04-27T00:00:00.000Z",
+    "ticker": "SGOV",
+    "action": "BUY",
+    "quantity": 1.5903,
+    "price": 100.65,
+    "total_amount": 160.06,
+    "realized_pl": 0.0
+  },
+  {
+    "date": "2026-04-27T00:00:00.000Z",
+    "ticker": "IAU",
+    "action": "BUY",
+    "quantity": 0.2384,
+    "price": 88.07,
+    "total_amount": 21.0,
+    "realized_pl": 0.0
+  },
+  {
+    "date": "2026-04-27T00:00:00.000Z",
+    "ticker": "USMV",
+    "action": "BUY",
+    "quantity": 0.2013,
+    "price": 94.12,
+    "total_amount": 18.95,
+    "realized_pl": 0.0
+  },
+  {
+    "date": "2026-05-07T00:00:00.000Z",
+    "ticker": "SGOV",
+    "action": "DRIP",
+    "quantity": 0.0327,
+    "price": 100.45,
+    "total_amount": 3.28,
+    "realized_pl": 0.0
+  },
+  {
+    "date": "2026-05-12T00:00:00.000Z",
+    "ticker": "EFAV",
+    "action": "SELL",
+    "quantity": 2.0461,
+    "price": 90.78,
+    "total_amount": 185.74,
+    "realized_pl": -4.26
+  },
+  {
+    "date": "2026-05-12T00:00:00.000Z",
+    "ticker": "IDEV",
+    "action": "BUY",
+    "quantity": 0.9634,
+    "price": 88.99,
+    "total_amount": 85.73,
+    "realized_pl": 0.0
+  },
+  {
+    "date": "2026-05-12T00:00:00.000Z",
+    "ticker": "VOO",
+    "action": "BUY",
+    "quantity": 0.442,
+    "price": 678.69,
+    "total_amount": 299.98,
+    "realized_pl": 0.0
+  }
+]
