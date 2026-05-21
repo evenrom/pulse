@@ -3,6 +3,7 @@ import { validatePin } from "@/lib/auth";
 import { db } from "@/db";
 import { transactions, snapshots } from "@/db/schema";
 import crypto from "crypto";
+import { sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
     const jsonTransactions = (await import("@/lib/historical_transactions.json")).default;
     const jsonSnapshots = (await import("@/lib/snapshots.json")).default;
 
-    if (!Array.isArray(jsonTransactions)) {
+    if (!Array.isArray(jsonTransactions) || !Array.isArray(jsonSnapshots)) {
       return NextResponse.json({ error: "Invalid JSON format: expected an array" }, { status: 400 });
     }
 
@@ -84,9 +85,6 @@ export async function POST(request: NextRequest) {
           insertedCount = insertData.length;
         }
 
-        // Call shared utility to rebuild snapshots using the transaction runner
-        // await rebuildHistoricalSnapshots(tx);
-
         const snapshotInsertData = (jsonSnapshots as Record<string, unknown>[]).map((s) => ({
           date: String(s.date),
           total_value: Number(s.total_value),
@@ -94,7 +92,13 @@ export async function POST(request: NextRequest) {
         }));
 
         if (snapshotInsertData.length > 0) {
-          await tx.insert(snapshots).values(snapshotInsertData);
+          await tx.insert(snapshots).values(snapshotInsertData).onConflictDoUpdate({
+            target: snapshots.date,
+            set: {
+              total_value: sql`excluded.total_value`,
+              net_invested: sql`excluded.net_invested`
+            }
+          });
         }
       });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
