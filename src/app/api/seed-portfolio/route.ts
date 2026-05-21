@@ -3,7 +3,6 @@ import { validatePin } from "@/lib/auth";
 import { db } from "@/db";
 import { transactions, snapshots } from "@/db/schema";
 import crypto from "crypto";
-import { rebuildHistoricalSnapshots } from "@/lib/finance";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +16,7 @@ export async function POST(request: NextRequest) {
     }
 
     const jsonTransactions = (await import("@/lib/historical_transactions.json")).default;
+    const jsonSnapshots = (await import("@/lib/snapshots.json")).default;
 
     if (!Array.isArray(jsonTransactions)) {
       return NextResponse.json({ error: "Invalid JSON format: expected an array" }, { status: 400 });
@@ -85,7 +85,17 @@ export async function POST(request: NextRequest) {
         }
 
         // Call shared utility to rebuild snapshots using the transaction runner
-        await rebuildHistoricalSnapshots(tx);
+        // await rebuildHistoricalSnapshots(tx);
+
+        const snapshotInsertData = (jsonSnapshots as Record<string, unknown>[]).map((s) => ({
+          date: String(s.date),
+          total_value: Number(s.total_value),
+          net_invested: Number(s.net_invested)
+        }));
+
+        if (snapshotInsertData.length > 0) {
+          await tx.insert(snapshots).values(snapshotInsertData);
+        }
       });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
