@@ -28,20 +28,31 @@ export async function GET(request: Request) {
     // 3. Calculate Exchange Rate
     let exchangeRate = 3.72; // ברירת מחדל ריאלית להיום במקום 3.7 היבש
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
       // מעבר ל-API אמין יותר והוראה אגרסיבית ל-Next.js לא לשמור Cache בשום מצב
       const exRes = await fetch("https://open.er-api.com/v6/latest/USD", { 
         cache: "no-store",
-        next: { revalidate: 0 } 
+        next: { revalidate: 0 },
+        signal: controller.signal
       });
       
+      clearTimeout(timeoutId);
+
       if (exRes.ok) {
         const exData = await exRes.json();
-        if (exData && exData.rates && exData.rates.ILS) {
-          exchangeRate = exData.rates.ILS;
+        if (exData && exData.rates && typeof exData.rates.ILS === 'number') {
+          const rate = exData.rates.ILS;
+          if (rate >= 3.0 && rate <= 4.5) {
+            exchangeRate = rate;
+          } else {
+            console.warn(`Anomalous exchange rate fetched: ${rate}. Using default ${exchangeRate}.`);
+          }
         }
       }
     } catch (e) {
-      console.warn("Failed to fetch live exchange rate, using default.", e);
+      console.warn("Failed to fetch live exchange rate or timeout reached, using default.", e);
     }
 
     // 4. Calculate Aggregate Metrics
