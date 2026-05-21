@@ -183,7 +183,7 @@ export default function Home() {
     try {
       setIsLoading(true);
       setError(null);
-      const res = await fetch("/api/portfolio?t=" + Date.now(), {
+      const res = await fetch("/api/portfolio", {
         headers: {
           "x-pin": currentPin,
         },
@@ -197,7 +197,6 @@ export default function Home() {
       }
 
       const data = await res.json();
-      console.log("Current Exchange Rate applied:", data.metrics.exchangeRate);
       setPortfolioData(data);
       setIsAuthenticated(true);
     } catch (err: unknown) {
