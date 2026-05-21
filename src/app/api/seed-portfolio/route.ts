@@ -31,19 +31,49 @@ export async function POST(request: NextRequest) {
         await tx.delete(snapshots);
 
         // Map to db schema and insert
-        const insertData = jsonTransactions.map((t: Record<string, unknown>) => ({
-          id: crypto.randomUUID(),
-          date: typeof t.date === "string" ? t.date : new Date().toISOString(),
-          ticker: typeof t.ticker === "string" ? t.ticker : "UNKNOWN",
-          action: ["BUY", "SELL", "DRIP"].includes(t.action as string) ? (t.action as "BUY" | "SELL" | "DRIP") : "BUY",
-          quantity: Number(t.quantity) || 0,
-          price: Number(t.price) || 0,
-          fees: Number(t.fees) || 0,
-          total_amount: Number(t.total_amount) || 0,
-          historic_rate: Number(t.historic_rate) || DEFAULT_HISTORIC_RATE,
-          realized_pl: Number(t.realized_pl) || 0,
-          created_at: new Date().toISOString(),
-        }));
+        const insertData = await Promise.all(
+          jsonTransactions.map(async (t: Record<string, unknown>) => {
+            const txDate = typeof t.date === "string" ? t.date : new Date().toISOString();
+            const dateOnly = txDate.slice(0, 10);
+            let dynamicRate = DEFAULT_HISTORIC_RATE;
+
+            try {
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+              const res = await fetch(`https://api.frankfurter.app/${dateOnly}?from=USD&to=ILS`, {
+                cache: 'force-cache',
+                signal: controller.signal
+              });
+              clearTimeout(timeoutId);
+
+              if (res.ok) {
+                const data = await res.json();
+                dynamicRate = data.rates?.ILS || 3.72;
+              } else {
+                console.warn(`Failed to fetch rate for ${dateOnly}. Status: ${res.status}. Using fallback.`);
+                dynamicRate = 3.72;
+              }
+            } catch (error) {
+              console.warn(`Error fetching rate for ${dateOnly}:`, error, 'Using fallback.');
+              dynamicRate = 3.72;
+            }
+
+            return {
+              id: crypto.randomUUID(),
+              date: txDate,
+              ticker: typeof t.ticker === "string" ? t.ticker : "UNKNOWN",
+              action: ["BUY", "SELL", "DRIP"].includes(t.action as string) ? (t.action as "BUY" | "SELL" | "DRIP") : "BUY",
+              quantity: Number(t.quantity) || 0,
+              price: Number(t.price) || 0,
+              fees: Number(t.fees) || 0,
+              total_amount: Number(t.total_amount) || 0,
+              historic_rate: dynamicRate,
+              realized_pl: Number(t.realized_pl) || 0,
+              created_at: new Date().toISOString(),
+            };
+          })
+        );
 
         if (insertData.length > 0) {
           await tx.insert(transactions).values(insertData);
