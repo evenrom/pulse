@@ -1,79 +1,124 @@
-export const dynamic = 'force-dynamic';
+import { NextResponse } from "next/server";
+import { db } from "@/db";
+import { transactions } from "@/db/schema";
+import { validatePin } from "@/lib/auth";
 
-import { NextResponse } from 'next/server';
-import { db } from '@/db';
-import { transactions, assets } from '@/db/schema';
-import { validatePin } from '@/lib/auth';
-import { eq } from 'drizzle-orm';
+export const dynamic = "force-dynamic";
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
     // 1. PIN Validation
-    const pin = req.headers.get('x-pin');
+    const pin = request.headers.get("x-pin");
     if (!pin || !validatePin(pin)) {
-      return NextResponse.json({ error: 'Unauthorized: Invalid or missing PIN' }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" } });
     }
 
-    // 2. Parse payload
-    const body = await req.json();
-    const { ticker, action, quantity, price, fees, date } = body;
-
-    if (!ticker || !action || quantity === undefined || price === undefined || fees === undefined || !date) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    // 2. Parse and Validate Payload
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400, headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" } });
     }
 
-    if (!['BUY', 'SELL', 'DRIP'].includes(action)) {
-       return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+    const { ticker, action, date, quantity, price, fees } = body;
+
+    if (!ticker || typeof ticker !== "string") {
+      return NextResponse.json({ error: "Invalid or missing ticker" }, { status: 400, headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" } });
     }
 
-    // 3. Calculate total_amount
-    const numQuantity = parseFloat(quantity);
-    const numPrice = parseFloat(price);
-    const numFees = parseFloat(fees);
-
-    let totalAmount = 0;
-    if (action === 'BUY' || action === 'DRIP') {
-      totalAmount = (numQuantity * numPrice) + numFees;
-    } else if (action === 'SELL') {
-      totalAmount = (numQuantity * numPrice) - numFees;
+    if (!["BUY", "SELL", "DRIP"].includes(action)) {
+      return NextResponse.json({ error: "Invalid or missing action. Must be BUY, SELL, or DRIP." }, { status: 400, headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" } });
     }
 
-    // 4. Insert transaction
-    const transactionId = crypto.randomUUID();
+    if (!date || typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return NextResponse.json({ error: "Invalid or missing date. Must be YYYY-MM-DD." }, { status: 400, headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" } });
+    }
+
+    if (typeof quantity !== "number" || quantity < 0) {
+      return NextResponse.json({ error: "Invalid or negative quantity" }, { status: 400, headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" } });
+    }
+
+    if (typeof price !== "number" || price < 0) {
+      return NextResponse.json({ error: "Invalid or negative price" }, { status: 400, headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" } });
+    }
+
+    if (typeof fees !== "number" || fees < 0) {
+      return NextResponse.json({ error: "Invalid or negative fees" }, { status: 400, headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" } });
+    }
+
+    // 3. Calculate Total Amount
+    let totalAmount = (quantity * price) + fees;
+    if (action === "SELL") {
+      totalAmount = (quantity * price) - fees;
+    }
+
+    // 4. Fetch Historical Exchange Rate
+    let historicRate = 3.72; // Default
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const exRes = await fetch(`https://api.frankfurter.app/${date}?from=USD&to=ILS`, {
+        signal: controller.signal,
+        cache: "no-store"
+      });
+
+      if (exRes.ok) {
+        const exData = await exRes.json();
+        if (exData && exData.rates && typeof exData.rates.ILS === "number") {
+          const fetchedRate = exData.rates.ILS;
+          if (fetchedRate >= 3.0 && fetchedRate <= 4.5) {
+            historicRate = fetchedRate;
+          } else {
+            console.warn(`Fetched exchange rate ${fetchedRate} is out of bounds [3.0, 4.5]. Using fallback 3.72.`);
+          }
+        }
+      } else {
+        throw new Error(`Exchange rate API responded with status ${exRes.status}`);
+      }
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    // 5. Data Integrity & Database Insertion
+    const txId = crypto.randomUUID();
+    const createdAt = Math.floor(Date.now() / 1000).toString(); // Unix timestamp in seconds
+    const realizedPl = 0; // Default for BUY/DRIP
+
     await db.insert(transactions).values({
-      id: transactionId,
+      id: txId,
       date,
       ticker,
-      action,
-      quantity: numQuantity,
-      price: numPrice,
-      fees: numFees,
+      action: action as "BUY" | "SELL" | "DRIP",
+      quantity,
+      price,
+      fees,
       total_amount: totalAmount,
-      historic_rate: null, // Assuming this is set elsewhere or later
-      realized_pl: null, // Depending on calculation logic later
-      created_at: Date.now().toString(),
+      historic_rate: historicRate,
+      realized_pl: realizedPl,
+      created_at: createdAt
     });
 
-    // 5. Ensure asset placeholder exists
-    const existingAsset = await db.select().from(assets).where(eq(assets.ticker, ticker));
-    if (existingAsset.length === 0) {
-      await db.insert(assets).values({
-        ticker,
-        name: ticker, // Placeholder
-        region: 'Unknown',
-        sector: 'Unknown',
-        asset_class: 'Unknown',
-        current_price: numPrice, // Best guess for now
-        target_pct: null,
-        div_yield: null,
-        updated_at: Date.now().toString(),
-      });
-    }
+    return NextResponse.json(
+      { success: true, id: txId },
+      {
+        headers: {
+          "Cache-Control": "no-store, max-age=0, must-revalidate"
+        }
+      }
+    );
 
-    return NextResponse.json({ message: 'Trade successfully recorded', id: transactionId }, { status: 200 });
-
-  } catch (error: unknown) {
-    console.error('Trade API Error:', error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : String(error) || 'Failed to process trade' }, { status: 500 });
+  } catch (error) {
+    console.error("Trade API internal error:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      {
+        status: 500,
+        headers: {
+          "Cache-Control": "no-store, max-age=0, must-revalidate"
+        }
+      }
+    );
   }
 }
