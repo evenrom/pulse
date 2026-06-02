@@ -55,30 +55,34 @@ export async function POST(request: Request) {
 
     // 4. Fetch Historical Exchange Rate
     let historicRate = 3.72; // Default
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-
     try {
-      const exRes = await fetch(`https://api.frankfurter.app/${date}?from=USD&to=ILS`, {
-        signal: controller.signal,
-        cache: "no-store"
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-      if (exRes.ok) {
-        const exData = await exRes.json();
-        if (exData && exData.rates && typeof exData.rates.ILS === "number") {
-          const fetchedRate = exData.rates.ILS;
-          if (fetchedRate >= 3.0 && fetchedRate <= 4.5) {
-            historicRate = fetchedRate;
-          } else {
-            console.warn(`Fetched exchange rate ${fetchedRate} is out of bounds [3.0, 4.5]. Using fallback 3.72.`);
+      try {
+        const exRes = await fetch(`https://api.frankfurter.app/${date}?from=USD&to=ILS`, {
+          signal: controller.signal,
+          cache: "no-store"
+        });
+
+        if (exRes.ok) {
+          const exData = await exRes.json();
+          if (exData && exData.rates && typeof exData.rates.ILS === "number") {
+            const fetchedRate = exData.rates.ILS;
+            if (fetchedRate >= 3.0 && fetchedRate <= 4.5) {
+              historicRate = fetchedRate;
+            } else {
+              console.warn(`Fetched exchange rate ${fetchedRate} is out of bounds [3.0, 4.5]. Using fallback 3.72.`);
+            }
           }
+        } else {
+          throw new Error(`Exchange rate API responded with status ${exRes.status}`);
         }
-      } else {
-        throw new Error(`Exchange rate API responded with status ${exRes.status}`);
+      } finally {
+        clearTimeout(timeoutId);
       }
-    } finally {
-      clearTimeout(timeoutId);
+    } catch (e) {
+      console.warn("Failed to fetch historic exchange rate, using fallback 3.72.", e);
     }
 
     // 5. Data Integrity & Database Insertion
