@@ -69,7 +69,7 @@ export async function POST(request: Request) {
           const exData = await exRes.json();
           if (exData && exData.rates && typeof exData.rates.ILS === "number") {
             const fetchedRate = exData.rates.ILS;
-            if (fetchedRate >= 3.0 && fetchedRate <= 4.5) {
+            if (fetchedRate >= 2.0 && fetchedRate <= 4.5) {
               historicRate = fetchedRate;
             } else {
               console.warn(`Fetched exchange rate ${fetchedRate} is out of bounds [3.0, 4.5]. Using fallback 3.72.`);
