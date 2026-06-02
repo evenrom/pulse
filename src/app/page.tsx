@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { Lock, RefreshCw, DollarSign, Activity, TrendingUp, AlertCircle, ArrowRight, Calculator } from "lucide-react";
+import { Lock, RefreshCw, DollarSign, Activity, TrendingUp, AlertCircle, ArrowRight, Calculator, ArrowRightLeft } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { PALETTE, ENGINE_MAP, SECTOR_TO_ENGINE, GEO_BREAKDOWN, SECTOR_BREAKDOWN } from "../lib/config";
 import { calculateTotalReturnMetrics } from "../lib/finance";
@@ -59,8 +59,17 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [currency, setCurrency] = useState<"usd" | "ils">("usd");
   const [portfolioData, setPortfolioData] = useState<PortfolioData | null>(null);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "holdings" | "simulate">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "holdings" | "simulate" | "trade">("dashboard");
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+
+  const [tradeTicker, setTradeTicker] = useState("");
+  const [tradeAction, setTradeAction] = useState<"BUY" | "SELL" | "DRIP">("BUY");
+  const [tradeDate, setTradeDate] = useState(new Date().toISOString().split("T")[0]);
+  const [tradeQuantity, setTradeQuantity] = useState("");
+  const [tradePrice, setTradePrice] = useState("");
+  const [tradeFees, setTradeFees] = useState("0");
+  const [isTrading, setIsTrading] = useState(false);
+  const [tradeMessage, setTradeMessage] = useState<{type: "success" | "error", text: string} | null>(null);
 
   const [historyFilter, setHistoryFilter] = useState<"1W" | "1M" | "1Q" | "1Y" | "ALL">("ALL");
 
@@ -244,6 +253,59 @@ export default function Home() {
       }
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handleTradeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pin) return;
+    
+    try {
+      setIsTrading(true);
+      setTradeMessage(null);
+      
+      const payload = {
+        ticker: tradeTicker.toUpperCase(),
+        action: tradeAction,
+        date: tradeDate,
+        quantity: parseFloat(tradeQuantity),
+        price: parseFloat(tradePrice),
+        fees: parseFloat(tradeFees || "0")
+      };
+      
+      const res = await fetch("/api/trade", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-pin": pin
+        },
+        body: JSON.stringify(payload)
+      });
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        throw new Error(data.error || "Trade submission failed");
+      }
+      
+      setTradeMessage({ type: "success", text: "Trade executed successfully." });
+      // Reset form
+      setTradeTicker("");
+      setTradeQuantity("");
+      setTradePrice("");
+      setTradeFees("0");
+      
+      // Refresh portfolio
+      await fetchPortfolio(pin);
+      
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setTradeMessage({ type: "error", text: err.message });
+      } else {
+        setTradeMessage({ type: "error", text: "An unexpected error occurred" });
+      }
+    } finally {
+      setIsTrading(false);
     }
   };
 
@@ -840,28 +902,147 @@ export default function Home() {
         );
       })()}
 
-      <nav className="fixed bottom-0 left-0 w-full h-16 bg-slate-900 border-t border-slate-800 flex items-center justify-around z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.5)]">
-        <button
-          onClick={() => setActiveTab("dashboard")}
-          className={`flex flex-col items-center justify-center gap-1 text-xs sm:text-sm font-medium transition-colors cursor-pointer ${activeTab === "dashboard" ? "text-blue-500" : "text-slate-400 hover:text-slate-200"}`}
-        >
-          <Activity className="w-5 h-5" />
-          <span>Dashboard</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("holdings")}
-          className={`flex flex-col items-center justify-center gap-1 text-xs sm:text-sm font-medium transition-colors cursor-pointer ${activeTab === "holdings" ? "text-blue-500" : "text-slate-400 hover:text-slate-200"}`}
-        >
-          <DollarSign className="w-5 h-5" />
-          <span>Holdings</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("simulate")}
-          className={`flex flex-col items-center justify-center gap-1 text-xs sm:text-sm font-medium transition-colors cursor-pointer ${activeTab === "simulate" ? "text-blue-500" : "text-slate-400 hover:text-slate-200"}`}
-        >
-          <Calculator className="w-5 h-5" />
-          <span>Simulate</span>
-        </button>
+      {activeTab === "trade" && (
+        <div className="bg-[#0C1326]/90 backdrop-blur-[24px] border border-[rgba(141,169,255,0.1)] shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_8px_32px_rgba(0,0,0,0.4)] rounded-2xl p-6 md:p-8 max-w-xl mx-auto relative overflow-hidden mb-8">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h2 className="text-2xl font-bold text-white tracking-tight">Execute Trade</h2>
+              <p className="text-slate-400 mt-1 text-sm">Manual transaction entry</p>
+            </div>
+            <div className="p-3 bg-[#8EABFF]/10 rounded-xl border border-[#8EABFF]/20 shadow-[inset_0_0_10px_rgba(141,169,255,0.2)]">
+               <ArrowRightLeft className="w-6 h-6 text-[#8EABFF]" />
+            </div>
+          </div>
+          
+          {tradeMessage && (
+            <div className={`mb-6 p-4 rounded-xl border flex items-start gap-3 backdrop-blur-md transition-all ${tradeMessage.type === "success" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" : "bg-red-500/10 border-red-500/20 text-red-400"}`}>
+              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <p className="text-sm font-medium">{tradeMessage.text}</p>
+            </div>
+          )}
+
+          <form onSubmit={handleTradeSubmit} className="space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2 font-sans">Ticker</label>
+                <input
+                  type="text"
+                  required
+                  value={tradeTicker}
+                  onChange={(e) => setTradeTicker(e.target.value.toUpperCase())}
+                  className="w-full bg-slate-950/50 border border-[rgba(141,169,255,0.1)] rounded-xl px-4 py-3 text-white placeholder:text-slate-600 focus:outline-none focus:border-[#8EABFF] focus:ring-1 focus:ring-[#8EABFF] transition-all font-sans uppercase"
+                  placeholder="e.g. AAPL"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2 font-sans">Action</label>
+                <select
+                  value={tradeAction}
+                  onChange={(e) => setTradeAction(e.target.value as "BUY" | "SELL" | "DRIP")}
+                  className="w-full bg-slate-950/50 border border-[rgba(141,169,255,0.1)] rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#8EABFF] focus:ring-1 focus:ring-[#8EABFF] transition-all appearance-none font-sans"
+                >
+                  <option value="BUY">BUY</option>
+                  <option value="SELL">SELL</option>
+                  <option value="DRIP">DRIP</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2 font-sans">Date</label>
+              <input
+                type="date"
+                required
+                value={tradeDate}
+                onChange={(e) => setTradeDate(e.target.value)}
+                className="w-full bg-slate-950/50 border border-[rgba(141,169,255,0.1)] rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#8EABFF] focus:ring-1 focus:ring-[#8EABFF] transition-all font-sans"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2 font-sans">Quantity</label>
+                <input
+                  type="number"
+                  required
+                  step="any"
+                  min="0"
+                  value={tradeQuantity}
+                  onChange={(e) => setTradeQuantity(e.target.value)}
+                  className="w-full bg-slate-950/50 border border-[rgba(141,169,255,0.1)] rounded-xl px-4 py-3 text-white placeholder:text-slate-600 focus:outline-none focus:border-[#8EABFF] focus:ring-1 focus:ring-[#8EABFF] transition-all font-mono"
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2 font-sans">Price (USD)</label>
+                <input
+                  type="number"
+                  required
+                  step="any"
+                  min="0"
+                  value={tradePrice}
+                  onChange={(e) => setTradePrice(e.target.value)}
+                  className="w-full bg-slate-950/50 border border-[rgba(141,169,255,0.1)] rounded-xl px-4 py-3 text-white placeholder:text-slate-600 focus:outline-none focus:border-[#8EABFF] focus:ring-1 focus:ring-[#8EABFF] transition-all font-mono"
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2 font-sans">Fees (USD)</label>
+              <input
+                type="number"
+                required
+                step="any"
+                min="0"
+                value={tradeFees}
+                onChange={(e) => setTradeFees(e.target.value)}
+                className="w-full bg-slate-950/50 border border-[rgba(141,169,255,0.1)] rounded-xl px-4 py-3 text-white placeholder:text-slate-600 focus:outline-none focus:border-[#8EABFF] focus:ring-1 focus:ring-[#8EABFF] transition-all font-mono"
+                placeholder="0.00"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isTrading}
+              className="w-full bg-[#8EABFF] hover:bg-[#7A99F5] text-[#0C1326] font-bold py-3.5 rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(141,169,255,0.3)] mt-2 font-sans"
+            >
+              {isTrading ? (
+                <div className="h-5 w-5 border-2 border-[#0C1326]/30 border-t-[#0C1326] rounded-full animate-spin" />
+              ) : (
+                <>
+                  <span>Submit Trade</span>
+                  <ArrowRight className="w-5 h-5" />
+                </>
+              )}
+            </button>
+          </form>
+        </div>
+      )}
+
+      <nav className="fixed bottom-0 left-0 w-full h-16 bg-slate-900 border-t border-slate-800 flex items-center justify-around z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.5)] pb-[env(safe-area-inset-bottom)]">
+        {[
+          { id: "dashboard", label: "Dashboard", icon: Activity },
+          { id: "holdings", label: "Holdings", icon: DollarSign },
+          { id: "simulate", label: "Simulate", icon: Calculator },
+          { id: "trade", label: "Trade", icon: ArrowRightLeft },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as "dashboard" | "holdings" | "simulate" | "trade")}
+              className={`flex flex-col items-center justify-center gap-1 text-xs sm:text-sm font-medium transition-colors cursor-pointer relative w-full h-full ${isActive ? "text-[#8EABFF]" : "text-slate-400 hover:text-slate-200"}`}
+            >
+              <Icon className={`w-5 h-5 ${isActive ? "drop-shadow-[0_0_8px_rgba(141,169,255,0.8)]" : ""}`} />
+              <span>{tab.label}</span>
+              {isActive && (
+                <div className="absolute top-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-[#8EABFF] rounded-full shadow-[0_0_8px_rgba(141,169,255,1)]" />
+              )}
+            </button>
+          );
+        })}
       </nav>
     </div>
   );
