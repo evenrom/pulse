@@ -662,7 +662,14 @@ export default function Home() {
               {regionalData.map((entry, index) => (
                 <div key={entry.name} className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PALETTE[index % PALETTE.length] }} />
-                  <span className="text-sm text-slate-300">{entry.name}</span>
+                  <span className="text-sm text-slate-300">
+                    {entry.name === "North America" ? (
+                      <>
+                        <span className="sm:hidden">N. America</span>
+                        <span className="hidden sm:inline">North America</span>
+                      </>
+                    ) : entry.name}
+                  </span>
                   <span className="text-sm font-medium text-white">{entry.pct.toFixed(1)}%</span>
                 </div>
               ))}
@@ -705,7 +712,7 @@ export default function Home() {
                           <div className="font-semibold text-white flex items-center gap-2">
                             {asset.ticker}
                           </div>
-                          <div className="text-slate-500 text-xs mt-0.5">{asset.name || "Unknown Asset"}</div>
+                          <div className="hidden sm:block text-slate-500 text-xs mt-0.5">{asset.name || "Unknown Asset"}</div>
                         </td>
                         <td className="px-6 py-4 text-right text-slate-300">{asset.quantity.toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>
                         <td className="px-6 py-4 text-right text-slate-300">
@@ -1037,9 +1044,6 @@ export default function Home() {
             >
               <Icon className={`w-5 h-5 ${isActive ? "drop-shadow-[0_0_8px_rgba(141,169,255,0.8)]" : ""}`} />
               <span>{tab.label}</span>
-              {isActive && (
-                <div className="absolute top-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-[#8EABFF] rounded-full shadow-[0_0_8px_rgba(141,169,255,1)]" />
-              )}
             </button>
           );
         })}
