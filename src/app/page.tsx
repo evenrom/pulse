@@ -499,18 +499,23 @@ export default function Home() {
 
       {activeTab === "dashboard" && currentMetrics && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-8">
+          <div className="col-span-2 bg-slate-900 border border-slate-800 rounded-xl md:rounded-2xl p-4 md:p-5 min-w-0">
+            <p className="text-xs md:text-sm text-slate-400 mb-2">Total Profit</p>
+            <p className={`text-2xl md:text-3xl font-bold tracking-tight ${currentMetrics.netProfit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              {currentMetrics.netProfit > 0 ? "+" : ""}{formatCurrency(currentMetrics.netProfit, currency)}
+            </p>
+            <div className="flex items-center gap-4 mt-2 text-xs md:text-sm">
+              <span className={currentMetrics.netProfit >= 0 ? "text-emerald-400" : "text-red-400"}>{totalReturnPct >= 0 ? "+" : ""}{totalReturnPct.toFixed(1)}%</span>
+              <span className="text-slate-500">Dividends: {formatCurrency(currentMetrics.totalDrip, currency)}</span>
+            </div>
+          </div>
           {[
-            { label: "Value", value: currentMetrics.totalMarketValue, tone: "text-white", detail: null },
-            { label: "Invested", value: currentMetrics.netInvested, tone: "text-white", detail: null },
-            { label: "Profit", value: currentMetrics.netProfit, tone: currentMetrics.netProfit >= 0 ? "text-emerald-400" : "text-red-400", detail: `${totalReturnPct >= 0 ? "+" : ""}${totalReturnPct.toFixed(1)}%` },
-            { label: "Dividends", value: currentMetrics.totalDrip, tone: "text-emerald-400", detail: "DRIP profit" },
+            { label: "Value", value: currentMetrics.totalMarketValue },
+            { label: "Invested", value: currentMetrics.netInvested },
           ].map(card => (
             <div key={card.label} className="bg-slate-900 border border-slate-800 rounded-xl md:rounded-2xl p-4 md:p-5 min-w-0">
               <p className="text-xs md:text-sm text-slate-400 mb-2">{card.label}</p>
-              <p className={`text-lg md:text-2xl font-bold tracking-tight truncate ${card.tone}`} title={formatCurrency(card.value, currency)}>
-                {card.value > 0 && card.label === "Profit" ? "+" : ""}{formatCurrency(card.value, currency)}
-              </p>
-              {card.detail && <p className="text-xs text-slate-500 mt-1">{card.detail}</p>}
+              <p className="text-lg md:text-2xl font-bold tracking-tight truncate text-white" title={formatCurrency(card.value, currency)}>{formatCurrency(card.value, currency)}</p>
             </div>
           ))}
         </div>
@@ -554,20 +559,13 @@ export default function Home() {
                     if (active && payload && payload.length) {
                       const p = payload[0] as { value: number; payload: Record<string, number> };
                       const val = p.value;
-                      const suffix = currency;
                       return (
-                        <div className="bg-slate-800 border border-slate-700 p-3 rounded-lg shadow-xl min-w-52">
+                        <div className="bg-slate-800 border border-slate-700 p-3 rounded-lg shadow-xl min-w-44">
                           <p className="text-slate-400 text-sm mb-1">{label}</p>
-                          <p className={`font-semibold mb-2 ${val >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                            Profit: {val > 0 ? "+" : ""}{val.toFixed(2)}%
+                          <p className={`font-semibold ${val >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {val > 0 ? "+" : ""}{val.toFixed(2)}%
                           </p>
-                          <div className="space-y-1 text-xs">
-                            <div className="flex justify-between gap-4 text-slate-300"><span>Value</span><span>{formatCurrency(p.payload[`total_value_${suffix}`], currency)}</span></div>
-                            <div className="flex justify-between gap-4 text-slate-300"><span>Invested</span><span>{formatCurrency(p.payload[`net_invested_${suffix}`], currency)}</span></div>
-                            <div className="flex justify-between gap-4 text-slate-300"><span>Total profit</span><span>{formatCurrency(p.payload[`total_profit_${suffix}`], currency)}</span></div>
-                            <div className="flex justify-between gap-4 text-slate-400"><span>DRIP</span><span>{formatCurrency(p.payload[`drip_${suffix}`], currency)}</span></div>
-                            <div className="flex justify-between gap-4 text-slate-400"><span>Realized</span><span>{formatCurrency(p.payload[`realized_${suffix}`], currency)}</span></div>
-                          </div>
+                          <p className="text-sm text-slate-300 mt-1">{formatCurrency(p.payload[`total_profit_${currency}`], currency)}</p>
                         </div>
                       );
                     }
