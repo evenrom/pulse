@@ -4,7 +4,6 @@ import React, { useState, useMemo } from "react";
 import { Lock, RefreshCw, DollarSign, Activity, AlertCircle, ArrowRight, Calculator, ArrowRightLeft, List, Plus, Trash2 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, ReferenceLine } from 'recharts';
 import { PALETTE, ENGINE_MAP, SECTOR_TO_ENGINE, GEO_BREAKDOWN, SECTOR_BREAKDOWN } from "../lib/config";
-import { calculateTotalReturnMetrics } from "../lib/finance";
 
 type Asset = {
   ticker: string;
@@ -17,6 +16,10 @@ type Asset = {
   asset_class?: string;
   capital_profit_usd: number;
   capital_profit_ils: number;
+  total_profit_usd: number;
+  total_profit_ils: number;
+  realized_profit_usd: number;
+  realized_profit_ils: number;
   total_profit_pct: number;
   total_profit_pct_usd: number;
   total_profit_pct_ils: number;
@@ -755,18 +758,17 @@ export default function Home() {
               <thead className="bg-slate-950/50 text-slate-400">
                 <tr>
                   <th className="px-6 py-4 font-medium">Ticker</th>
+                  <th className="px-6 py-4 font-medium text-right">Return</th>
                   <th className="px-6 py-4 font-medium text-right">Quantity</th>
-                  <th className="hidden md:table-cell px-6 py-4 font-medium text-right">Price</th>
+                  <th className="px-6 py-4 font-medium text-right">Price</th>
                   <th className="px-6 py-4 font-medium text-right">Value</th>
-                  <th className="px-6 py-4 font-medium text-right">Actual</th>
-                  <th className="px-6 py-4 font-medium text-right">Target</th>
-                  <th className="px-6 py-4 font-medium text-right">Drift</th>
+                  <th className="px-6 py-4 font-medium text-right">Weight</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
                 {portfolioData?.assets.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-8 text-center text-slate-500">
+                    <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
                       No holdings.
                     </td>
                   </tr>
@@ -775,9 +777,7 @@ export default function Home() {
                     const actualWeight = portfolioData.metrics.usd.totalMarketValue > 0
                       ? (asset.value_usd / portfolioData.metrics.usd.totalMarketValue) * 100
                       : 0;
-                    const targetWeight = (asset.target_pct || 0) * 100;
-                    const drift = actualWeight - targetWeight;
-                    const driftTone = Math.abs(drift) <= 1 ? "text-slate-400" : Math.abs(drift) <= 3 ? "text-amber-400" : "text-red-400";
+                    const returnPct = currency === "usd" ? asset.total_profit_pct_usd : asset.total_profit_pct_ils;
                     return (
                     <React.Fragment key={asset.ticker}>
                       <tr
@@ -790,51 +790,40 @@ export default function Home() {
                           </div>
                           <div className="hidden sm:block text-slate-500 text-xs mt-0.5">{asset.name || "Unknown Asset"}</div>
                         </td>
+                        <td className={`px-6 py-4 text-right font-medium ${returnPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                          {returnPct >= 0 ? "+" : ""}{returnPct.toFixed(1)}%
+                        </td>
                         <td className="px-6 py-4 text-right text-slate-300">{asset.quantity.toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>
-                        <td className="hidden md:table-cell px-6 py-4 text-right text-slate-300">
+                        <td className="px-6 py-4 text-right text-slate-300">
                           {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(asset.current_price || 0)}
                         </td>
                         <td className="px-6 py-4 text-right font-medium text-white">
                           {formatCurrency(currency === "usd" ? asset.value_usd : asset.value_ils, currency)}
                         </td>
                         <td className="px-6 py-4 text-right text-slate-300">{actualWeight.toFixed(1)}%</td>
-                        <td className="px-6 py-4 text-right text-slate-400">{targetWeight.toFixed(1)}%</td>
-                        <td className={`px-6 py-4 text-right font-medium ${driftTone}`}>{drift >= 0 ? "+" : ""}{drift.toFixed(1)}%</td>
                       </tr>
                       {expandedRow === asset.ticker && (() => {
-                        const capProfit = currency === "usd" ? asset.capital_profit_usd : asset.capital_profit_ils;
-                        const drip = currency === "usd" ? asset.drip_usd : asset.drip_ils;
-                        const val = currency === "usd" ? asset.value_usd : asset.value_ils;
-
-                        const { totalReturn, totalReturnPct } = calculateTotalReturnMetrics(capProfit, drip, val);
+                        const totalProfitUsd = asset.total_profit_usd;
+                        const dripUsd = asset.drip_usd;
+                        const realizedUsd = asset.realized_profit_usd;
 
                         return (
                           <tr className="bg-slate-900/50">
-                            <td colSpan={7} className="px-6 py-4">
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm bg-slate-950 p-4 rounded-xl border border-slate-800">
+                            <td colSpan={6} className="px-6 py-4">
+                              <div className="grid grid-cols-3 gap-4 text-sm bg-slate-950 p-4 rounded-xl border border-slate-800">
                                 <div>
-                                  <p className="text-slate-500 mb-1">Total Return (%)</p>
-                                  <p className={`font-medium ${totalReturnPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                                    {totalReturnPct >= 0 ? "+" : ""}{totalReturnPct.toFixed(2)}%
+                                  <p className="text-slate-500 mb-1">Total profit</p>
+                                  <p className={`font-medium ${totalProfitUsd >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                    {totalProfitUsd >= 0 ? "+" : ""}{formatCurrency(totalProfitUsd, "usd")}
                                   </p>
                                 </div>
                                 <div>
-                                  <p className="text-slate-500 mb-1">Total Return</p>
-                                  <p className={`font-medium ${totalReturn >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                                    {totalReturn >= 0 ? "+" : ""}{formatCurrency(totalReturn, currency)}
-                                  </p>
+                                  <p className="text-slate-500 mb-1">DRIP profit</p>
+                                  <p className="font-medium text-white">{formatCurrency(dripUsd, "usd")}</p>
                                 </div>
                                 <div>
-                                  <p className="text-slate-500 mb-1">Capital Gain</p>
-                                  <p className={`font-medium ${capProfit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                                    {capProfit >= 0 ? "+" : ""}{formatCurrency(capProfit, currency)}
-                                  </p>
-                                </div>
-                                <div>
-                                  <p className="text-slate-500 mb-1">Reinvested (DRIP)</p>
-                                  <p className="font-medium text-white">
-                                    {formatCurrency(drip, currency)}
-                                  </p>
+                                  <p className="text-slate-500 mb-1">Realized profit</p>
+                                  <p className={`font-medium ${realizedUsd >= 0 ? "text-emerald-400" : "text-red-400"}`}>{formatCurrency(realizedUsd, "usd")}</p>
                                 </div>
                               </div>
                             </td>
@@ -1000,6 +989,7 @@ export default function Home() {
                   <th className="px-4 py-3 font-medium text-right">Current Value</th>
                   <th className="px-4 py-3 font-medium text-right">Current Weight</th>
                   <th className="px-4 py-3 font-medium text-right w-32">Target (%)</th>
+                  <th className="px-4 py-3 font-medium text-right">Drift</th>
                   <th className="px-4 py-3 font-medium text-right text-blue-400">Amount to Buy</th>
                 </tr>
               </thead>
@@ -1008,6 +998,9 @@ export default function Home() {
                   const currentValueDisplay = currency === "usd" ? asset.value_usd : asset.value_ils;
                   const currentTotalMarketValueDisplay = currentMetrics?.totalMarketValue || 0;
                   const currentWeight = currentTotalMarketValueDisplay > 0 ? (currentValueDisplay / currentTotalMarketValueDisplay) * 100 : 0;
+                  const targetWeight = targetWeights[asset.ticker] || 0;
+                  const drift = currentWeight - targetWeight;
+                  const driftTone = Math.abs(drift) <= 1 ? "text-slate-400" : Math.abs(drift) <= 3 ? "text-amber-400" : "text-red-400";
 
                   const targetValueUsd = projectedTotalUsd * ((targetWeights[asset.ticker] || 0) / 100);
                   const idealDeficitUsd = targetValueUsd - asset.value_usd;
@@ -1041,6 +1034,7 @@ export default function Home() {
                           className="w-20 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-white text-right focus:outline-none focus:border-blue-500"
                         />
                       </td>
+                      <td className={`px-4 py-3 text-right font-medium ${driftTone}`}>{drift >= 0 ? "+" : ""}{drift.toFixed(1)}%</td>
                       <td className="px-4 py-3 text-right font-medium text-emerald-400">
                         {amountToBuyDisplay > 0 ? `+${formatCurrency(amountToBuyDisplay, currency)}` : "$0"}
                       </td>
@@ -1056,6 +1050,7 @@ export default function Home() {
                       {Object.values(targetWeights).reduce((a, b) => a + (b || 0), 0).toFixed(1)}%
                     </span>
                   </td>
+                  <td />
                   <td className="px-4 py-3 text-right font-medium text-emerald-400">
                     +{formatCurrency(assetsToRender.reduce((sum, asset) => {
                         const targetValueUsd = projectedTotalUsd * ((targetWeights[asset.ticker] || 0) / 100);

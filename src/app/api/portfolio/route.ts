@@ -84,6 +84,10 @@ export async function GET(request: Request) {
         capital_profit_ils: profitMetricsAssetIls.capitalProfit,
         drip_usd: profitMetricsAssetUsd.totalDrip,
         drip_ils: profitMetricsAssetIls.totalDrip,
+        total_profit_usd: profitMetricsAssetUsd.netProfit,
+        total_profit_ils: profitMetricsAssetIls.netProfit,
+        realized_profit_usd: profitMetricsAssetUsd.totalRealizedGains,
+        realized_profit_ils: profitMetricsAssetIls.totalRealizedGains,
         total_profit_pct: totalProfitPctUsd, // Will be deprecated in UI
         total_profit_pct_usd: totalProfitPctUsd,
         total_profit_pct_ils: totalProfitPctIls,
