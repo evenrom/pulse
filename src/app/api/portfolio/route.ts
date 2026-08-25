@@ -122,15 +122,33 @@ export async function GET(request: Request) {
       const { date, total_value, net_invested } = snap;
       const val = Number(total_value || 0);
       const inv = Number(net_invested || 0);
-      const realizedThroughDate = allTransactions.reduce((sum, tx) => {
-        if (!date || !tx.date || String(tx.date).slice(0, 10) > date) return sum;
-        return sum + Number(tx.realized_pl || 0);
-      }, 0);
-      const return_pct = inv > 0 ? ((val + realizedThroughDate - inv) / inv) * 100 : 0;
+      const transactionsThroughDate = allTransactions.filter(tx => date && tx.date && String(tx.date).slice(0, 10) <= date);
+      const realizedUsd = transactionsThroughDate.reduce((sum, tx) => sum + Number(tx.realized_pl || 0), 0);
+      const dripUsd = transactionsThroughDate
+        .filter(tx => tx.action === "DRIP")
+        .reduce((sum, tx) => sum + Number(tx.total_amount || 0), 0);
+      const netInvestedIlsAtDate = calculateNetInvested(transactionsThroughDate, true);
+      const realizedIls = transactionsThroughDate.reduce((sum, tx) => sum + (Number(tx.realized_pl || 0) * Number(tx.historic_rate || 1)), 0);
+      const dripIls = transactionsThroughDate
+        .filter(tx => tx.action === "DRIP")
+        .reduce((sum, tx) => sum + (Number(tx.total_amount || 0) * Number(tx.historic_rate || 1)), 0);
+      const totalValueIls = val * exchangeRate;
+      const profitUsd = val + realizedUsd - inv;
+      const profitIls = totalValueIls + realizedIls - netInvestedIlsAtDate;
       return {
         date,
-        return_pct,
-        realized_profit: realizedThroughDate,
+        return_pct_usd: inv > 0 ? (profitUsd / inv) * 100 : 0,
+        return_pct_ils: netInvestedIlsAtDate > 0 ? (profitIls / netInvestedIlsAtDate) * 100 : 0,
+        total_value_usd: val,
+        total_value_ils: totalValueIls,
+        net_invested_usd: inv,
+        net_invested_ils: netInvestedIlsAtDate,
+        total_profit_usd: profitUsd,
+        total_profit_ils: profitIls,
+        drip_usd: dripUsd,
+        drip_ils: dripIls,
+        realized_usd: realizedUsd,
+        realized_ils: realizedIls,
       };
     });
 

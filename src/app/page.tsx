@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { Lock, RefreshCw, DollarSign, Activity, TrendingUp, AlertCircle, ArrowRight, Calculator, ArrowRightLeft, List } from "lucide-react";
+import { Lock, RefreshCw, DollarSign, Activity, AlertCircle, ArrowRight, Calculator, ArrowRightLeft, List, Plus, Trash2 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, ReferenceLine } from 'recharts';
 import { PALETTE, ENGINE_MAP, SECTOR_TO_ENGINE, GEO_BREAKDOWN, SECTOR_BREAKDOWN } from "../lib/config";
 import { calculateTotalReturnMetrics } from "../lib/finance";
@@ -48,7 +48,21 @@ type PortfolioData = {
   };
   assets: Asset[];
   snapshots: Snapshot[];
-  history?: { date: string; return_pct: number }[];
+  history?: {
+    date: string;
+    return_pct_usd: number;
+    return_pct_ils: number;
+    total_value_usd: number;
+    total_value_ils: number;
+    net_invested_usd: number;
+    net_invested_ils: number;
+    total_profit_usd: number;
+    total_profit_ils: number;
+    drip_usd: number;
+    drip_ils: number;
+    realized_usd: number;
+    realized_ils: number;
+  }[];
   transactions: {
     id: string;
     date: string | null;
@@ -77,6 +91,16 @@ type SyncResult = {
   failedTickers: { ticker: string; error: string }[];
 };
 
+type TradeRow = {
+  ticker: string;
+  action: "BUY" | "SELL" | "DRIP";
+  quantity: string;
+  price: string;
+  fees: string;
+};
+
+const emptyTradeRow = (): TradeRow => ({ ticker: "", action: "BUY", quantity: "", price: "", fees: "0" });
+
 export default function Home() {
   const [pin, setPin] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -89,12 +113,8 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"dashboard" | "holdings" | "simulate" | "history" | "trade">("dashboard");
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
-  const [tradeTicker, setTradeTicker] = useState("");
-  const [tradeAction, setTradeAction] = useState<"BUY" | "SELL" | "DRIP">("BUY");
   const [tradeDate, setTradeDate] = useState(new Date().toISOString().split("T")[0]);
-  const [tradeQuantity, setTradeQuantity] = useState("");
-  const [tradePrice, setTradePrice] = useState("");
-  const [tradeFees, setTradeFees] = useState("0");
+  const [tradeRows, setTradeRows] = useState<TradeRow[]>([emptyTradeRow()]);
   const [isTrading, setIsTrading] = useState(false);
   const [tradeMessage, setTradeMessage] = useState<{type: "success" | "error", text: string} | null>(null);
 
@@ -141,10 +161,11 @@ export default function Home() {
         const dateObj = new Date(item.date);
         return {
           ...item,
+          return_pct: currency === "usd" ? item.return_pct_usd : item.return_pct_ils,
           formattedDate: dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
         };
       });
-  }, [portfolioData?.history, historyFilter]);
+  }, [portfolioData?.history, historyFilter, currency]);
 
   const maxAbsReturn = useMemo(() => {
     if (!filteredHistory || filteredHistory.length === 0) return 1;
@@ -298,12 +319,14 @@ export default function Home() {
       setTradeMessage(null);
       
       const payload = {
-        ticker: tradeTicker.toUpperCase(),
-        action: tradeAction,
-        date: tradeDate,
-        quantity: parseFloat(tradeQuantity),
-        price: parseFloat(tradePrice),
-        fees: parseFloat(tradeFees || "0")
+        trades: tradeRows.map(row => ({
+          ticker: row.ticker.toUpperCase(),
+          action: row.action,
+          date: tradeDate,
+          quantity: parseFloat(row.quantity),
+          price: parseFloat(row.price),
+          fees: parseFloat(row.fees || "0"),
+        })),
       };
       
       const res = await fetch("/api/trade", {
@@ -321,15 +344,11 @@ export default function Home() {
         throw new Error(data.error || "Trade submission failed");
       }
       
-      const realizedText = tradeAction === "SELL" && typeof data.realizedProfit === "number"
-        ? ` FIFO realized profit: ${formatCurrency(data.realizedProfit, "usd")}.`
-        : "";
-      setTradeMessage({ type: "success", text: `Trade recorded successfully.${realizedText}` });
-      // Reset form
-      setTradeTicker("");
-      setTradeQuantity("");
-      setTradePrice("");
-      setTradeFees("0");
+      const sales = (data.transactions || []).filter((tx: { action: string }) => tx.action === "SELL");
+      const realizedTotal = sales.reduce((sum: number, tx: { realizedProfit: number }) => sum + Number(tx.realizedProfit || 0), 0);
+      const realizedText = sales.length > 0 ? ` FIFO profit: ${formatCurrency(realizedTotal, "usd")}.` : "";
+      setTradeMessage({ type: "success", text: `${data.count} transaction${data.count === 1 ? "" : "s"} recorded.${realizedText}` });
+      setTradeRows([emptyTradeRow()]);
       
       // Refresh portfolio
       await fetchPortfolio(pin);
@@ -419,7 +438,7 @@ export default function Home() {
             <Activity className="w-8 h-8 text-blue-500" />
             Pulse
           </h1>
-          <p className="text-slate-400 mt-1">Terminal Dashboard</p>
+          <p className="text-slate-400 mt-1">Portfolio</p>
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-3">
@@ -456,7 +475,7 @@ export default function Home() {
             title="Update market prices (may take a minute)"
           >
             <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin" : ""}`} />
-            <span className="hidden sm:inline">{isSyncing ? "Syncing..." : "Refresh Prices"}</span>
+            <span className="hidden sm:inline">{isSyncing ? "Updating..." : "Refresh"}</span>
           </button>
         </div>
       </header>
@@ -479,45 +498,21 @@ export default function Home() {
       )}
 
       {activeTab === "dashboard" && currentMetrics && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="md:col-span-1 bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-slate-400 font-medium">Total Market Value</h3>
-              <div className="p-2 bg-blue-500/10 rounded-lg">
-                <DollarSign className="w-5 h-5 text-blue-500" />
-              </div>
-            </div>
-            <div>
-              <p className="text-3xl font-bold text-white tracking-tight">
-                {formatCurrency(currentMetrics.totalMarketValue, currency)}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-8">
+          {[
+            { label: "Value", value: currentMetrics.totalMarketValue, tone: "text-white", detail: null },
+            { label: "Invested", value: currentMetrics.netInvested, tone: "text-white", detail: null },
+            { label: "Profit", value: currentMetrics.netProfit, tone: currentMetrics.netProfit >= 0 ? "text-emerald-400" : "text-red-400", detail: `${totalReturnPct >= 0 ? "+" : ""}${totalReturnPct.toFixed(1)}%` },
+            { label: "Dividends", value: currentMetrics.totalDrip, tone: "text-emerald-400", detail: "DRIP profit" },
+          ].map(card => (
+            <div key={card.label} className="bg-slate-900 border border-slate-800 rounded-xl md:rounded-2xl p-4 md:p-5 min-w-0">
+              <p className="text-xs md:text-sm text-slate-400 mb-2">{card.label}</p>
+              <p className={`text-lg md:text-2xl font-bold tracking-tight truncate ${card.tone}`} title={formatCurrency(card.value, currency)}>
+                {card.value > 0 && card.label === "Profit" ? "+" : ""}{formatCurrency(card.value, currency)}
               </p>
-              <p className="text-sm text-slate-400 mt-1">
-                Net Invested: {formatCurrency(currentMetrics.netInvested, currency)}
-              </p>
+              {card.detail && <p className="text-xs text-slate-500 mt-1">{card.detail}</p>}
             </div>
-          </div>
-
-          <div className="md:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-slate-400 font-medium">Total Return</h3>
-              <div className="p-2 bg-emerald-500/10 rounded-lg">
-                <TrendingUp className="w-5 h-5 text-emerald-500" />
-              </div>
-            </div>
-            <div>
-              <p className={`text-3xl font-bold tracking-tight flex items-baseline gap-2 ${currentMetrics.netProfit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                <span>{currentMetrics.netProfit >= 0 ? "+" : ""}{formatCurrency(currentMetrics.netProfit, currency)}</span>
-                <span className="text-lg font-medium opacity-80">({totalReturnPct >= 0 ? "+" : ""}{totalReturnPct.toFixed(1)}%)</span>
-              </p>
-              <div className="text-sm text-slate-400 mt-2 flex items-center justify-start gap-x-6 flex-wrap">
-                <span>Capital: {formatCurrency(currentMetrics.capitalProfit, currency)}</span>
-                <span>•</span>
-                <span>DRIP: {formatCurrency(currentMetrics.totalDrip, currency)}</span>
-                <span>•</span>
-                <span>Realized: {formatCurrency(currentMetrics.totalRealizedGains, currency)}</span>
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
       )}
 
@@ -526,7 +521,7 @@ export default function Home() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
             <div>
               <h3 className="text-white font-semibold text-lg">Portfolio Profit</h3>
-              <p className="text-slate-400 text-sm">Zero means portfolio value equals Net Invested</p>
+              <p className="text-slate-400 text-sm">Zero = Net Invested</p>
             </div>
             <div className="flex bg-slate-950 rounded-lg p-1 border border-slate-800">
               {(["1W", "1M", "1Q", "1Y", "ALL"] as const).map(filter => (
@@ -557,14 +552,22 @@ export default function Home() {
                 <Tooltip
                   content={({ active, payload, label }: { active?: boolean, payload?: readonly unknown[], label?: string | number }) => {
                     if (active && payload && payload.length) {
-                      const p = payload[0] as { value: number };
+                      const p = payload[0] as { value: number; payload: Record<string, number> };
                       const val = p.value;
+                      const suffix = currency;
                       return (
-                        <div className="bg-slate-800 border border-slate-700 p-3 rounded-lg shadow-xl">
+                        <div className="bg-slate-800 border border-slate-700 p-3 rounded-lg shadow-xl min-w-52">
                           <p className="text-slate-400 text-sm mb-1">{label}</p>
-                          <p className={`font-semibold ${val >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          <p className={`font-semibold mb-2 ${val >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                             Profit: {val > 0 ? "+" : ""}{val.toFixed(2)}%
                           </p>
+                          <div className="space-y-1 text-xs">
+                            <div className="flex justify-between gap-4 text-slate-300"><span>Value</span><span>{formatCurrency(p.payload[`total_value_${suffix}`], currency)}</span></div>
+                            <div className="flex justify-between gap-4 text-slate-300"><span>Invested</span><span>{formatCurrency(p.payload[`net_invested_${suffix}`], currency)}</span></div>
+                            <div className="flex justify-between gap-4 text-slate-300"><span>Total profit</span><span>{formatCurrency(p.payload[`total_profit_${suffix}`], currency)}</span></div>
+                            <div className="flex justify-between gap-4 text-slate-400"><span>DRIP</span><span>{formatCurrency(p.payload[`drip_${suffix}`], currency)}</span></div>
+                            <div className="flex justify-between gap-4 text-slate-400"><span>Realized</span><span>{formatCurrency(p.payload[`realized_${suffix}`], currency)}</span></div>
+                          </div>
                         </div>
                       );
                     }
@@ -755,19 +758,29 @@ export default function Home() {
                 <tr>
                   <th className="px-6 py-4 font-medium">Ticker</th>
                   <th className="px-6 py-4 font-medium text-right">Quantity</th>
-                  <th className="px-6 py-4 font-medium text-right">Current Price</th>
-                  <th className="px-6 py-4 font-medium text-right">Value ({currency.toUpperCase()})</th>
+                  <th className="hidden md:table-cell px-6 py-4 font-medium text-right">Price</th>
+                  <th className="px-6 py-4 font-medium text-right">Value</th>
+                  <th className="px-6 py-4 font-medium text-right">Actual</th>
+                  <th className="px-6 py-4 font-medium text-right">Target</th>
+                  <th className="px-6 py-4 font-medium text-right">Drift</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
                 {portfolioData?.assets.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-6 py-8 text-center text-slate-500">
-                      No holdings found.
+                    <td colSpan={7} className="px-6 py-8 text-center text-slate-500">
+                      No holdings.
                     </td>
                   </tr>
                 ) : (
-                  portfolioData?.assets.filter(a => a.quantity > 0).map((asset) => (
+                  portfolioData?.assets.filter(a => a.quantity > 0).map((asset) => {
+                    const actualWeight = portfolioData.metrics.usd.totalMarketValue > 0
+                      ? (asset.value_usd / portfolioData.metrics.usd.totalMarketValue) * 100
+                      : 0;
+                    const targetWeight = (asset.target_pct || 0) * 100;
+                    const drift = actualWeight - targetWeight;
+                    const driftTone = Math.abs(drift) <= 1 ? "text-slate-400" : Math.abs(drift) <= 3 ? "text-amber-400" : "text-red-400";
+                    return (
                     <React.Fragment key={asset.ticker}>
                       <tr
                         className="hover:bg-slate-800/50 transition-colors cursor-pointer"
@@ -780,12 +793,15 @@ export default function Home() {
                           <div className="hidden sm:block text-slate-500 text-xs mt-0.5">{asset.name || "Unknown Asset"}</div>
                         </td>
                         <td className="px-6 py-4 text-right text-slate-300">{asset.quantity.toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>
-                        <td className="px-6 py-4 text-right text-slate-300">
+                        <td className="hidden md:table-cell px-6 py-4 text-right text-slate-300">
                           {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(asset.current_price || 0)}
                         </td>
                         <td className="px-6 py-4 text-right font-medium text-white">
                           {formatCurrency(currency === "usd" ? asset.value_usd : asset.value_ils, currency)}
                         </td>
+                        <td className="px-6 py-4 text-right text-slate-300">{actualWeight.toFixed(1)}%</td>
+                        <td className="px-6 py-4 text-right text-slate-400">{targetWeight.toFixed(1)}%</td>
+                        <td className={`px-6 py-4 text-right font-medium ${driftTone}`}>{drift >= 0 ? "+" : ""}{drift.toFixed(1)}%</td>
                       </tr>
                       {expandedRow === asset.ticker && (() => {
                         const capProfit = currency === "usd" ? asset.capital_profit_usd : asset.capital_profit_ils;
@@ -796,8 +812,8 @@ export default function Home() {
 
                         return (
                           <tr className="bg-slate-900/50">
-                            <td colSpan={4} className="px-6 py-4">
-                              <div className="grid grid-cols-4 gap-4 text-sm bg-slate-950 p-4 rounded-xl border border-slate-800">
+                            <td colSpan={7} className="px-6 py-4">
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm bg-slate-950 p-4 rounded-xl border border-slate-800">
                                 <div>
                                   <p className="text-slate-500 mb-1">Total Return (%)</p>
                                   <p className={`font-medium ${totalReturnPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
@@ -828,7 +844,7 @@ export default function Home() {
                         );
                       })()}
                     </React.Fragment>
-                  ))
+                  );})
                 )}
               </tbody>
             </table>
@@ -840,8 +856,8 @@ export default function Home() {
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
           <div className="p-6 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h2 className="text-xl font-bold text-white">Transaction History</h2>
-              <p className="text-sm text-slate-400 mt-1">{portfolioData?.transactions.length || 0} recorded transactions</p>
+              <h2 className="text-xl font-bold text-white">History</h2>
+              <p className="text-sm text-slate-400 mt-1">{portfolioData?.transactions.length || 0} transactions</p>
             </div>
             <div className="flex gap-2">
               <input
@@ -863,7 +879,28 @@ export default function Home() {
               </select>
             </div>
           </div>
-          <div className="overflow-x-auto">
+          <div className="md:hidden divide-y divide-slate-800">
+            {filteredTransactions.length === 0 ? (
+              <p className="p-8 text-center text-slate-500">No matches.</p>
+            ) : filteredTransactions.map(tx => (
+              <div key={tx.id} className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-white">{tx.ticker}</span>
+                    <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${tx.action === "BUY" ? "bg-blue-500/10 text-blue-400" : tx.action === "SELL" ? "bg-amber-500/10 text-amber-400" : "bg-emerald-500/10 text-emerald-400"}`}>{tx.action}</span>
+                  </div>
+                  <span className="text-xs text-slate-500">{tx.date ? new Date(tx.date).toLocaleDateString() : "—"}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div><p className="text-slate-500">Qty</p><p className="text-slate-300 font-mono">{Number(tx.quantity || 0).toLocaleString(undefined, { maximumFractionDigits: 8 })}</p></div>
+                  <div><p className="text-slate-500">Price</p><p className="text-slate-300 font-mono">{formatCurrency(Number(tx.price || 0), "usd")}</p></div>
+                  <div className="text-right"><p className="text-slate-500">Total</p><p className="text-white font-mono">{formatCurrency(Number(tx.total_amount || 0), "usd")}</p></div>
+                </div>
+                {tx.action === "SELL" && <p className={`text-xs mt-2 ${Number(tx.realized_pl || 0) >= 0 ? "text-emerald-400" : "text-red-400"}`}>FIFO profit: {formatCurrency(Number(tx.realized_pl || 0), "usd")}</p>}
+              </div>
+            ))}
+          </div>
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-sm whitespace-nowrap">
               <thead className="bg-slate-950/50 text-slate-400">
                 <tr>
@@ -934,11 +971,11 @@ export default function Home() {
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <Calculator className="w-5 h-5 text-blue-400" />
-              Rebalancing Simulator
+              Rebalance
             </h2>
           </div>
           <div className="mb-6">
-            <label className="block text-sm font-medium text-slate-400 mb-2">New Capital to Invest ({currency.toUpperCase()})</label>
+            <label className="block text-sm font-medium text-slate-400 mb-2">New contribution ({currency.toUpperCase()})</label>
             <input
               type="number"
               value={newCapital}
@@ -952,7 +989,7 @@ export default function Home() {
             <div className="mb-6 bg-red-950/30 border border-red-900/50 rounded-xl p-4 flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
               <p className="text-sm text-red-400">
-                ההון שהוזן אינו מספיק לאיזון מושלם ללא מכירה. נדרשת תוספת של <strong className="font-semibold">{formatCurrency(missingCapitalDisplay, currency)}</strong> כדי להגיע לאיזון מלא.
+                Add <strong className="font-semibold">{formatCurrency(missingCapitalDisplay, currency)}</strong> more for full balance without selling.
               </p>
             </div>
           )}
@@ -1045,13 +1082,13 @@ export default function Home() {
       })()}
 
       {activeTab === "trade" && (
-        <div className="bg-[#0C1326]/90 backdrop-blur-[24px] border border-[rgba(141,169,255,0.1)] shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_8px_32px_rgba(0,0,0,0.4)] rounded-2xl p-6 md:p-8 max-w-xl mx-auto relative overflow-hidden mb-8">
-          <div className="flex items-center justify-between mb-8">
+        <div className="bg-[#0C1326]/90 backdrop-blur-[24px] border border-[rgba(141,169,255,0.1)] rounded-2xl p-4 md:p-8 max-w-5xl mx-auto mb-8">
+          <div className="flex items-center justify-between mb-6">
             <div>
-              <h2 className="text-2xl font-bold text-white tracking-tight">Execute Trade</h2>
-              <p className="text-slate-400 mt-1 text-sm">Manual transaction entry</p>
+              <h2 className="text-2xl font-bold text-white tracking-tight">Add Transactions</h2>
+              <p className="text-slate-400 mt-1 text-sm">Record one purchase or the full month</p>
             </div>
-            <div className="p-3 bg-[#8EABFF]/10 rounded-xl border border-[#8EABFF]/20 shadow-[inset_0_0_10px_rgba(141,169,255,0.2)]">
+            <div className="hidden sm:block p-3 bg-[#8EABFF]/10 rounded-xl border border-[#8EABFF]/20">
                <ArrowRightLeft className="w-6 h-6 text-[#8EABFF]" />
             </div>
           </div>
@@ -1063,86 +1100,59 @@ export default function Home() {
             </div>
           )}
 
-          <form onSubmit={handleTradeSubmit} className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2 font-sans">Ticker</label>
-                <input
-                  type="text"
-                  required
-                  value={tradeTicker}
-                  onChange={(e) => setTradeTicker(e.target.value.toUpperCase())}
-                  className="w-full bg-slate-950/50 border border-[rgba(141,169,255,0.1)] rounded-xl px-4 py-3 text-white placeholder:text-slate-600 focus:outline-none focus:border-[#8EABFF] focus:ring-1 focus:ring-[#8EABFF] transition-all font-sans uppercase"
-                  placeholder="e.g. AAPL"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2 font-sans">Action</label>
-                <select
-                  value={tradeAction}
-                  onChange={(e) => setTradeAction(e.target.value as "BUY" | "SELL" | "DRIP")}
-                  className="w-full bg-slate-950/50 border border-[rgba(141,169,255,0.1)] rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#8EABFF] focus:ring-1 focus:ring-[#8EABFF] transition-all appearance-none font-sans"
-                >
-                  <option value="BUY">BUY</option>
-                  <option value="SELL">SELL</option>
-                  <option value="DRIP">DRIP</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2 font-sans">Date</label>
+          <form onSubmit={handleTradeSubmit} className="space-y-5">
+            <div className="max-w-xs">
+              <label className="block text-xs font-medium text-slate-400 mb-2">Date for this batch</label>
               <input
                 type="date"
                 required
                 value={tradeDate}
                 onChange={(e) => setTradeDate(e.target.value)}
-                className="w-full bg-slate-950/50 border border-[rgba(141,169,255,0.1)] rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#8EABFF] focus:ring-1 focus:ring-[#8EABFF] transition-all font-sans"
+                className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-3 py-2.5 text-white focus:border-[#8EABFF]"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2 font-sans">Quantity</label>
-                <input
-                  type="number"
-                  required
-                  step="any"
-                  min="0"
-                  value={tradeQuantity}
-                  onChange={(e) => setTradeQuantity(e.target.value)}
-                  className="w-full bg-slate-950/50 border border-[rgba(141,169,255,0.1)] rounded-xl px-4 py-3 text-white placeholder:text-slate-600 focus:outline-none focus:border-[#8EABFF] focus:ring-1 focus:ring-[#8EABFF] transition-all font-mono"
-                  placeholder="0.00"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2 font-sans">Price (USD)</label>
-                <input
-                  type="number"
-                  required
-                  step="any"
-                  min="0"
-                  value={tradePrice}
-                  onChange={(e) => setTradePrice(e.target.value)}
-                  className="w-full bg-slate-950/50 border border-[rgba(141,169,255,0.1)] rounded-xl px-4 py-3 text-white placeholder:text-slate-600 focus:outline-none focus:border-[#8EABFF] focus:ring-1 focus:ring-[#8EABFF] transition-all font-mono"
-                  placeholder="0.00"
-                />
-              </div>
+            <div className="space-y-3">
+              {tradeRows.map((row, index) => {
+                const updateRow = (field: keyof TradeRow, value: string) => setTradeRows(current => current.map((item, rowIndex) => rowIndex === index ? { ...item, [field]: value } : item));
+                return (
+                  <div key={index} className="grid grid-cols-2 md:grid-cols-[1.1fr_1fr_1fr_1fr_0.8fr_auto] gap-2 p-3 bg-slate-950/40 border border-slate-800 rounded-xl">
+                    <label className="col-span-1">
+                      <span className="text-[11px] text-slate-500 md:hidden">Ticker</span>
+                      <select required value={row.ticker} onChange={event => updateRow("ticker", event.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-white">
+                        <option value="">Ticker</option>
+                        {portfolioData?.assets.map(asset => <option key={asset.ticker} value={asset.ticker}>{asset.ticker}</option>)}
+                      </select>
+                    </label>
+                    <label>
+                      <span className="text-[11px] text-slate-500 md:hidden">Action</span>
+                      <select value={row.action} onChange={event => updateRow("action", event.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-white">
+                        <option value="BUY">BUY</option><option value="SELL">SELL</option><option value="DRIP">DRIP</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span className="text-[11px] text-slate-500">Qty</span>
+                      <input required type="number" step="any" min="0" value={row.quantity} onChange={event => updateRow("quantity", event.target.value)} placeholder="0" className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-white font-mono" />
+                    </label>
+                    <label>
+                      <span className="text-[11px] text-slate-500">Price</span>
+                      <input required type="number" step="any" min="0" value={row.price} onChange={event => updateRow("price", event.target.value)} placeholder="$" className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-white font-mono" />
+                    </label>
+                    <label>
+                      <span className="text-[11px] text-slate-500">Fee</span>
+                      <input required type="number" step="any" min="0" value={row.fees} onChange={event => updateRow("fees", event.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-white font-mono" />
+                    </label>
+                    <button type="button" disabled={tradeRows.length === 1} onClick={() => setTradeRows(current => current.filter((_, rowIndex) => rowIndex !== index))} className="self-end p-2 text-slate-500 hover:text-red-400 disabled:opacity-20" aria-label={`Remove row ${index + 1}`}>
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2 font-sans">Fees (USD)</label>
-              <input
-                type="number"
-                required
-                step="any"
-                min="0"
-                value={tradeFees}
-                onChange={(e) => setTradeFees(e.target.value)}
-                className="w-full bg-slate-950/50 border border-[rgba(141,169,255,0.1)] rounded-xl px-4 py-3 text-white placeholder:text-slate-600 focus:outline-none focus:border-[#8EABFF] focus:ring-1 focus:ring-[#8EABFF] transition-all font-mono"
-                placeholder="0.00"
-              />
-            </div>
+            <button type="button" disabled={tradeRows.length >= 20} onClick={() => setTradeRows(current => [...current, emptyTradeRow()])} className="flex items-center gap-2 text-sm text-[#8EABFF] hover:text-white disabled:opacity-40">
+              <Plus className="w-4 h-4" /> Add row
+            </button>
 
             <button
               type="submit"
@@ -1153,7 +1163,7 @@ export default function Home() {
                 <div className="h-5 w-5 border-2 border-[#0C1326]/30 border-t-[#0C1326] rounded-full animate-spin" />
               ) : (
                 <>
-                  <span>Submit Trade</span>
+                  <span>Record {tradeRows.length}</span>
                   <ArrowRight className="w-5 h-5" />
                 </>
               )}
@@ -1164,9 +1174,9 @@ export default function Home() {
 
       <nav className="fixed bottom-0 left-0 w-full h-16 bg-slate-900 border-t border-slate-800 flex items-center justify-around z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.5)] pb-[env(safe-area-inset-bottom)]">
         {[
-          { id: "dashboard", label: "Dashboard", icon: Activity },
-          { id: "holdings", label: "Holdings", icon: DollarSign },
-          { id: "simulate", label: "Simulate", icon: Calculator },
+          { id: "dashboard", label: "Home", icon: Activity },
+          { id: "holdings", label: "Assets", icon: DollarSign },
+          { id: "simulate", label: "Plan", icon: Calculator },
           { id: "history", label: "History", icon: List },
           { id: "trade", label: "Trade", icon: ArrowRightLeft },
         ].map((tab) => {
@@ -1176,7 +1186,7 @@ export default function Home() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as "dashboard" | "holdings" | "simulate" | "history" | "trade")}
-              className={`flex flex-col items-center justify-center gap-1 text-xs sm:text-sm font-medium transition-colors cursor-pointer relative w-full h-full ${isActive ? "text-[#8EABFF]" : "text-slate-400 hover:text-slate-200"}`}
+              className={`flex flex-col items-center justify-center gap-1 text-[11px] sm:text-sm font-medium transition-colors cursor-pointer relative w-full h-full ${isActive ? "text-[#8EABFF]" : "text-slate-400 hover:text-slate-200"}`}
             >
               <Icon className={`w-5 h-5 ${isActive ? "drop-shadow-[0_0_8px_rgba(141,169,255,0.8)]" : ""}`} />
               <span>{tab.label}</span>
