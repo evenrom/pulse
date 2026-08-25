@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { transactions } from "@/db/schema";
+import { assets, transactions } from "@/db/schema";
 import { validatePin } from "@/lib/auth";
+import { calculateFifo } from "@/lib/fifo";
+import { eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -21,9 +23,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400, headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" } });
     }
 
-    const { ticker, action, date, quantity, price, fees } = body;
+    const { action, date, quantity, price, fees } = body;
+    const ticker = typeof body.ticker === "string" ? body.ticker.trim().toUpperCase() : "";
 
-    if (!ticker || typeof ticker !== "string") {
+    if (!ticker) {
       return NextResponse.json({ error: "Invalid or missing ticker" }, { status: 400, headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" } });
     }
 
@@ -31,20 +34,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid or missing action. Must be BUY, SELL, or DRIP." }, { status: 400, headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" } });
     }
 
-    if (!date || typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    const parsedDate = typeof date === "string" ? new Date(`${date}T00:00:00.000Z`) : null;
+    const isValidDate = parsedDate && !Number.isNaN(parsedDate.getTime()) && parsedDate.toISOString().slice(0, 10) === date;
+    if (!date || typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !isValidDate) {
       return NextResponse.json({ error: "Invalid or missing date. Must be YYYY-MM-DD." }, { status: 400, headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" } });
     }
 
-    if (typeof quantity !== "number" || quantity < 0) {
-      return NextResponse.json({ error: "Invalid or negative quantity" }, { status: 400, headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" } });
+    if (typeof quantity !== "number" || !Number.isFinite(quantity) || quantity <= 0) {
+      return NextResponse.json({ error: "Quantity must be greater than zero" }, { status: 400, headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" } });
     }
 
-    if (typeof price !== "number" || price < 0) {
-      return NextResponse.json({ error: "Invalid or negative price" }, { status: 400, headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" } });
+    if (typeof price !== "number" || !Number.isFinite(price) || price <= 0) {
+      return NextResponse.json({ error: "Price must be greater than zero" }, { status: 400, headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" } });
     }
 
-    if (typeof fees !== "number" || fees < 0) {
+    if (typeof fees !== "number" || !Number.isFinite(fees) || fees < 0) {
       return NextResponse.json({ error: "Invalid or negative fees" }, { status: 400, headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" } });
+    }
+
+    const matchingAsset = await db.select({ ticker: assets.ticker }).from(assets).where(eq(assets.ticker, ticker));
+    if (matchingAsset.length === 0) {
+      return NextResponse.json({ error: `Unknown ticker ${ticker}. Add it to assets before recording a transaction.` }, { status: 400, headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" } });
     }
 
     // 3. Calculate Total Amount
@@ -87,8 +97,37 @@ export async function POST(request: Request) {
 
     // 5. Data Integrity & Database Insertion
     const txId = crypto.randomUUID();
-    const createdAt = Math.floor(Date.now() / 1000).toString(); // Unix timestamp in seconds
-    const realizedPl = 0; // Default for BUY/DRIP
+    const createdAt = Date.now().toString();
+    let realizedPl = 0;
+
+    const existingTransactions = await db.select().from(transactions);
+    const fifoResult = calculateFifo([
+      ...existingTransactions,
+      {
+        id: txId,
+        date,
+        ticker,
+        action: action as "BUY" | "SELL" | "DRIP",
+        quantity,
+        price,
+        fees,
+        total_amount: totalAmount,
+        created_at: createdAt,
+      },
+    ]);
+
+    if (fifoResult.issues.length > 0) {
+      const relevantIssue = fifoResult.issues.find((issue) => issue.transactionId === txId) || fifoResult.issues[0];
+      return NextResponse.json({ error: relevantIssue.message }, { status: 400, headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" } });
+    }
+
+    if (action === "SELL") {
+      const fifoSale = fifoResult.sales.find((sale) => sale.transactionId === txId);
+      if (!fifoSale) {
+        return NextResponse.json({ error: "Unable to calculate FIFO result for this sale." }, { status: 400, headers: { "Cache-Control": "no-store, max-age=0, must-revalidate" } });
+      }
+      realizedPl = fifoSale.realizedProfit;
+    }
 
     await db.insert(transactions).values({
       id: txId,
@@ -105,7 +144,7 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json(
-      { success: true, id: txId },
+      { success: true, id: txId, realizedProfit: realizedPl },
       {
         headers: {
           "Cache-Control": "no-store, max-age=0, must-revalidate"

@@ -122,17 +122,70 @@ export async function GET(request: Request) {
       const { date, total_value, net_invested } = snap;
       const val = Number(total_value || 0);
       const inv = Number(net_invested || 0);
-      const return_pct = inv > 0 ? ((val - inv) / inv) * 100 : 0;
+      const realizedThroughDate = allTransactions.reduce((sum, tx) => {
+        if (!date || !tx.date || String(tx.date).slice(0, 10) > date) return sum;
+        return sum + Number(tx.realized_pl || 0);
+      }, 0);
+      const return_pct = inv > 0 ? ((val + realizedThroughDate - inv) / inv) * 100 : 0;
       return {
         date,
-        return_pct
+        return_pct,
+        realized_profit: realizedThroughDate,
       };
     });
+
+    const parseUpdatedAt = (value: string | number | null): number | null => {
+      if (value == null) return null;
+      const numericValue = Number(value);
+      if (Number.isFinite(numericValue)) {
+        return numericValue < 10_000_000_000 ? numericValue * 1000 : numericValue;
+      }
+      const parsed = Date.parse(String(value));
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const activeAssets = enrichedAssets.filter(asset => asset.quantity > 0 || asset.target_pct > 0);
+    const staleThreshold = Date.now() - (72 * 60 * 60 * 1000);
+    const staleTickers = activeAssets
+      .filter(asset => {
+        const updatedAt = parseUpdatedAt(asset.updated_at);
+        return updatedAt == null || updatedAt < staleThreshold;
+      })
+      .map(asset => asset.ticker);
+    const latestUpdate = activeAssets
+      .map(asset => parseUpdatedAt(asset.updated_at))
+      .filter((value): value is number => value != null)
+      .sort((a, b) => b - a)[0] || null;
+
+    const transactionHistory = [...allTransactions]
+      .sort((a, b) => {
+        const dateDifference = String(b.date || "").localeCompare(String(a.date || ""));
+        if (dateDifference !== 0) return dateDifference;
+        return Number(b.created_at || 0) - Number(a.created_at || 0);
+      })
+      .map(tx => ({
+        id: tx.id,
+        date: tx.date,
+        ticker: tx.ticker,
+        action: tx.action,
+        quantity: tx.quantity,
+        price: tx.price,
+        fees: tx.fees,
+        total_amount: tx.total_amount,
+        historic_rate: tx.historic_rate,
+        realized_pl: tx.realized_pl,
+      }));
 
     return NextResponse.json({
       metrics,
       assets: enrichedAssets,
       history,
+      transactions: transactionHistory,
+      operationalStatus: {
+        lastPriceUpdate: latestUpdate ? new Date(latestUpdate).toISOString() : null,
+        staleTickers,
+        activeAssetCount: activeAssets.length,
+      },
     }, {
       headers: {
         "Cache-Control": "no-store, max-age=0, must-revalidate"

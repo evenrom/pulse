@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:accounting": "tsx src/lib/fifo.test.ts",
+    "reconcile:fifo": "tsx scripts/reconcile-fifo.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.17.3",

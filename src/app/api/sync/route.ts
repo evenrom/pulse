@@ -16,8 +16,18 @@ async function runSync() {
   // 1. Fetch all assets
   const allAssets = await db.select().from(assets);
   if (!allAssets || allAssets.length === 0) {
-    return { success: true, message: 'No assets found to sync.' };
+    return {
+      success: true,
+      partial: false,
+      message: 'No assets found to sync.',
+      attemptedAt: new Date().toISOString(),
+      updatedTickers: [],
+      failedTickers: [],
+    };
   }
+
+  const updatedTickers: string[] = [];
+  const failedTickers: { ticker: string; error: string }[] = [];
 
   // 2. Fetch prices from Yahoo Finance and update DB
   for (const asset of allAssets) {
@@ -38,6 +48,7 @@ async function runSync() {
 
       if (!response.ok) {
         console.error(`Failed to fetch quote for ${asset.ticker}. Status: ${response.status}`);
+        failedTickers.push({ ticker: asset.ticker, error: `Price provider returned ${response.status}` });
         continue;
       }
 
@@ -52,11 +63,15 @@ async function runSync() {
 
         // Update local object to avoid a second DB read
         asset.current_price = newPrice;
+        asset.updated_at = Date.now().toString();
+        updatedTickers.push(asset.ticker);
       } else {
         console.error(`Invalid quote data for ${asset.ticker}:`, data);
+        failedTickers.push({ ticker: asset.ticker, error: 'Invalid quote data' });
       }
     } catch (err) {
       console.error(`Error updating price for ${asset.ticker}:`, err);
+      failedTickers.push({ ticker: asset.ticker, error: err instanceof Error ? err.message : 'Unknown price error' });
     }
   }
 
@@ -86,12 +101,22 @@ async function runSync() {
     });
   }
 
-  return { success: true, message: 'Sync completed successfully.' };
+  return {
+    success: failedTickers.length === 0,
+    partial: updatedTickers.length > 0 && failedTickers.length > 0,
+    message: failedTickers.length === 0
+      ? `Updated ${updatedTickers.length} assets.`
+      : `Updated ${updatedTickers.length} assets; ${failedTickers.length} failed.`,
+    attemptedAt: new Date().toISOString(),
+    updatedTickers,
+    failedTickers,
+  };
 }
 
 function verifyCronAuth(request: NextRequest): NextResponse | null {
   const authHeader = request.headers.get('authorization');
-  const hasValidCron = authHeader === `Bearer ${process.env.CRON_SECRET}`;
+  const cronSecret = process.env.CRON_SECRET;
+  const hasValidCron = Boolean(cronSecret) && authHeader === `Bearer ${cronSecret}`;
 
   const pinHeader = request.headers.get('x-pin');
   let hasValidPin = false;

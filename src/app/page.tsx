@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { Lock, RefreshCw, DollarSign, Activity, TrendingUp, AlertCircle, ArrowRight, Calculator, ArrowRightLeft } from "lucide-react";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { Lock, RefreshCw, DollarSign, Activity, TrendingUp, AlertCircle, ArrowRight, Calculator, ArrowRightLeft, List } from "lucide-react";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, ReferenceLine } from 'recharts';
 import { PALETTE, ENGINE_MAP, SECTOR_TO_ENGINE, GEO_BREAKDOWN, SECTOR_BREAKDOWN } from "../lib/config";
 import { calculateTotalReturnMetrics } from "../lib/finance";
 
@@ -49,6 +49,32 @@ type PortfolioData = {
   assets: Asset[];
   snapshots: Snapshot[];
   history?: { date: string; return_pct: number }[];
+  transactions: {
+    id: string;
+    date: string | null;
+    ticker: string | null;
+    action: "BUY" | "SELL" | "DRIP" | null;
+    quantity: number | null;
+    price: number | null;
+    fees: number | null;
+    total_amount: number | null;
+    historic_rate: number | null;
+    realized_pl: number | null;
+  }[];
+  operationalStatus: {
+    lastPriceUpdate: string | null;
+    staleTickers: string[];
+    activeAssetCount: number;
+  };
+};
+
+type SyncResult = {
+  success: boolean;
+  partial: boolean;
+  message: string;
+  attemptedAt: string;
+  updatedTickers: string[];
+  failedTickers: { ticker: string; error: string }[];
 };
 
 export default function Home() {
@@ -56,10 +82,11 @@ export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currency, setCurrency] = useState<"usd" | "ils">("usd");
   const [portfolioData, setPortfolioData] = useState<PortfolioData | null>(null);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "holdings" | "simulate" | "trade">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "holdings" | "simulate" | "history" | "trade">("dashboard");
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   const [tradeTicker, setTradeTicker] = useState("");
@@ -75,6 +102,8 @@ export default function Home() {
 
   const [newCapital, setNewCapital] = useState<string>("");
   const [targetWeights, setTargetWeights] = useState<Record<string, number>>({});
+  const [transactionSearch, setTransactionSearch] = useState("");
+  const [transactionAction, setTransactionAction] = useState<"ALL" | "BUY" | "SELL" | "DRIP">("ALL");
 
   React.useEffect(() => {
     if (portfolioData?.assets) {
@@ -239,9 +268,13 @@ export default function Home() {
         },
       });
 
+      const result = await res.json();
+
       if (!res.ok) {
-        throw new Error("Failed to sync market prices");
+        throw new Error(result.error || "Failed to sync market prices");
       }
+
+      setSyncResult(result);
 
       // Re-fetch data after sync
       await fetchPortfolio(pin);
@@ -288,7 +321,10 @@ export default function Home() {
         throw new Error(data.error || "Trade submission failed");
       }
       
-      setTradeMessage({ type: "success", text: "Trade executed successfully." });
+      const realizedText = tradeAction === "SELL" && typeof data.realizedProfit === "number"
+        ? ` FIFO realized profit: ${formatCurrency(data.realizedProfit, "usd")}.`
+        : "";
+      setTradeMessage({ type: "success", text: `Trade recorded successfully.${realizedText}` });
       // Reset form
       setTradeTicker("");
       setTradeQuantity("");
@@ -363,6 +399,17 @@ export default function Home() {
   const currentMetrics = portfolioData?.metrics[currency];
 
   const totalReturnPct = currentMetrics?.netInvested ? (currentMetrics.netProfit / currentMetrics.netInvested) * 100 : 0;
+  const operationalStatus = portfolioData?.operationalStatus;
+  const hasSyncProblem = Boolean(syncResult?.failedTickers.length || operationalStatus?.staleTickers.length);
+  const lastPriceUpdateLabel = operationalStatus?.lastPriceUpdate
+    ? new Date(operationalStatus.lastPriceUpdate).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+    : "Never updated";
+  const filteredTransactions = (portfolioData?.transactions || []).filter(tx => {
+    const matchesAction = transactionAction === "ALL" || tx.action === transactionAction;
+    const query = transactionSearch.trim().toUpperCase();
+    const matchesSearch = !query || tx.ticker?.toUpperCase().includes(query);
+    return matchesAction && matchesSearch;
+  });
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -375,7 +422,14 @@ export default function Home() {
           <p className="text-slate-400 mt-1">Terminal Dashboard</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <div
+            className={`flex items-center gap-2 text-xs ${hasSyncProblem ? "text-amber-400" : "text-slate-400"}`}
+            title={operationalStatus?.staleTickers.length ? `Stale: ${operationalStatus.staleTickers.join(", ")}` : "All active prices are current"}
+          >
+            <span className={`h-2 w-2 rounded-full ${hasSyncProblem ? "bg-amber-400" : "bg-emerald-400"}`} />
+            <span>Prices {lastPriceUpdateLabel}</span>
+          </div>
           <div className="bg-slate-900 border border-slate-800 rounded-lg p-1 flex">
             <button
               onClick={() => setCurrency("usd")}
@@ -411,6 +465,16 @@ export default function Home() {
         <div className="mb-6 flex items-center gap-2 text-red-400 bg-red-400/10 p-4 rounded-xl text-sm border border-red-500/20">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
           <p>{error}</p>
+        </div>
+      )}
+
+      {syncResult && syncResult.failedTickers.length > 0 && (
+        <div className="mb-6 flex items-start gap-2 text-amber-300 bg-amber-400/10 p-4 rounded-xl text-sm border border-amber-500/20">
+          <AlertCircle className="w-5 h-5 flex-shrink-0" />
+          <div>
+            <p>{syncResult.message}</p>
+            <p className="text-amber-400/80 mt-1">{syncResult.failedTickers.map(item => item.ticker).join(", ")} still use their previous prices.</p>
+          </div>
         </div>
       )}
 
@@ -461,8 +525,8 @@ export default function Home() {
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-8">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
             <div>
-              <h3 className="text-white font-semibold text-lg">Portfolio Return</h3>
-              <p className="text-slate-400 text-sm">Time-weighted historical performance</p>
+              <h3 className="text-white font-semibold text-lg">Portfolio Profit</h3>
+              <p className="text-slate-400 text-sm">Zero means portfolio value equals Net Invested</p>
             </div>
             <div className="flex bg-slate-950 rounded-lg p-1 border border-slate-800">
               {(["1W", "1M", "1Q", "1Y", "ALL"] as const).map(filter => (
@@ -489,6 +553,7 @@ export default function Home() {
                   hide
                   domain={[-maxAbsReturn, maxAbsReturn]}
                 />
+                <ReferenceLine y={0} stroke="#64748b" strokeWidth={1.5} />
                 <Tooltip
                   content={({ active, payload, label }: { active?: boolean, payload?: readonly unknown[], label?: string | number }) => {
                     if (active && payload && payload.length) {
@@ -498,7 +563,7 @@ export default function Home() {
                         <div className="bg-slate-800 border border-slate-700 p-3 rounded-lg shadow-xl">
                           <p className="text-slate-400 text-sm mb-1">{label}</p>
                           <p className={`font-semibold ${val >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                            Return: {val > 0 ? "+" : ""}{val.toFixed(2)}%
+                            Profit: {val > 0 ? "+" : ""}{val.toFixed(2)}%
                           </p>
                         </div>
                       );
@@ -771,6 +836,76 @@ export default function Home() {
         </div>
       )}
 
+      {activeTab === "history" && (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+          <div className="p-6 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold text-white">Transaction History</h2>
+              <p className="text-sm text-slate-400 mt-1">{portfolioData?.transactions.length || 0} recorded transactions</p>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="search"
+                value={transactionSearch}
+                onChange={(event) => setTransactionSearch(event.target.value)}
+                placeholder="Ticker"
+                className="w-28 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-blue-500"
+              />
+              <select
+                value={transactionAction}
+                onChange={(event) => setTransactionAction(event.target.value as "ALL" | "BUY" | "SELL" | "DRIP")}
+                className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500"
+              >
+                <option value="ALL">All</option>
+                <option value="BUY">Buy</option>
+                <option value="SELL">Sell</option>
+                <option value="DRIP">DRIP</option>
+              </select>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm whitespace-nowrap">
+              <thead className="bg-slate-950/50 text-slate-400">
+                <tr>
+                  <th className="px-5 py-4 font-medium">Date</th>
+                  <th className="px-5 py-4 font-medium">Ticker</th>
+                  <th className="px-5 py-4 font-medium">Action</th>
+                  <th className="px-5 py-4 font-medium text-right">Quantity</th>
+                  <th className="px-5 py-4 font-medium text-right">Price</th>
+                  <th className="px-5 py-4 font-medium text-right">Total</th>
+                  <th className="px-5 py-4 font-medium text-right">FIFO Profit</th>
+                  <th className="px-5 py-4 font-medium text-right">USD/ILS</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {filteredTransactions.length === 0 ? (
+                  <tr><td colSpan={8} className="px-5 py-10 text-center text-slate-500">No matching transactions.</td></tr>
+                ) : filteredTransactions.map(tx => (
+                  <tr key={tx.id} className="hover:bg-slate-800/40">
+                    <td className="px-5 py-4 text-slate-400">{tx.date ? new Date(tx.date).toLocaleDateString() : "—"}</td>
+                    <td className="px-5 py-4 font-semibold text-white">{tx.ticker || "—"}</td>
+                    <td className="px-5 py-4">
+                      <span className={`px-2 py-1 rounded-md text-xs font-semibold ${
+                        tx.action === "BUY" ? "bg-blue-500/10 text-blue-400" :
+                        tx.action === "SELL" ? "bg-amber-500/10 text-amber-400" :
+                        "bg-emerald-500/10 text-emerald-400"
+                      }`}>{tx.action}</span>
+                    </td>
+                    <td className="px-5 py-4 text-right text-slate-300 font-mono">{Number(tx.quantity || 0).toLocaleString(undefined, { maximumFractionDigits: 8 })}</td>
+                    <td className="px-5 py-4 text-right text-slate-300 font-mono">{formatCurrency(Number(tx.price || 0), "usd")}</td>
+                    <td className="px-5 py-4 text-right text-white font-mono">{formatCurrency(Number(tx.total_amount || 0), "usd")}</td>
+                    <td className={`px-5 py-4 text-right font-mono ${Number(tx.realized_pl || 0) >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                      {tx.action === "SELL" ? formatCurrency(Number(tx.realized_pl || 0), "usd") : "—"}
+                    </td>
+                    <td className="px-5 py-4 text-right text-slate-400 font-mono">{Number(tx.historic_rate || 0).toFixed(4)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {activeTab === "simulate" && (() => {
         const newCapitalNum = Number(newCapital) || 0;
         const exchangeRate = portfolioData?.metrics.exchangeRate || 1;
@@ -1032,6 +1167,7 @@ export default function Home() {
           { id: "dashboard", label: "Dashboard", icon: Activity },
           { id: "holdings", label: "Holdings", icon: DollarSign },
           { id: "simulate", label: "Simulate", icon: Calculator },
+          { id: "history", label: "History", icon: List },
           { id: "trade", label: "Trade", icon: ArrowRightLeft },
         ].map((tab) => {
           const Icon = tab.icon;
@@ -1039,7 +1175,7 @@ export default function Home() {
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as "dashboard" | "holdings" | "simulate" | "trade")}
+              onClick={() => setActiveTab(tab.id as "dashboard" | "holdings" | "simulate" | "history" | "trade")}
               className={`flex flex-col items-center justify-center gap-1 text-xs sm:text-sm font-medium transition-colors cursor-pointer relative w-full h-full ${isActive ? "text-[#8EABFF]" : "text-slate-400 hover:text-slate-200"}`}
             >
               <Icon className={`w-5 h-5 ${isActive ? "drop-shadow-[0_0_8px_rgba(141,169,255,0.8)]" : ""}`} />
