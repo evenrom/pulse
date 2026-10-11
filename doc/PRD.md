@@ -21,7 +21,7 @@
 - **Equation Subtext**: Breakdown of Capital Profit vs. DRIP.
 
 ### 3.3 Assets & Allocation (Composition)
-- **Growth Drivers**: Double-doughnut charts (Sectors & Engines).
+- **Sector & Engine Allocation**: Double-doughnut charts of current exposure. Yahoo Finance sector weights are cached in Turso and refreshed weekly through market sync; SGOV and IAU retain custom classifications. Initial configured weights are labelled as fallback until the first successful refresh. Sources and retrieval dates are shown on the dashboard.
 - **Regional Split**: Horizontal bar chart for geographic exposure.
 - **High-Density Table**: List of holdings with expandable details.
 

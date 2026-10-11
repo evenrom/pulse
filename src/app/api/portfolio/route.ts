@@ -3,6 +3,8 @@ import { db } from "@/db";
 import { assets, transactions, snapshots } from "@/db/schema";
 import { asc } from "drizzle-orm";
 import { validatePin } from "@/lib/auth";
+import { resolveSectorAllocation } from "@/lib/sector-allocation";
+import { readSectorAllocationCache } from "@/lib/sector-allocation-cache";
 import {
   calculateNetInvested,
   calculateHoldings,
@@ -24,6 +26,10 @@ export async function GET(request: Request) {
     const allAssets = await db.select().from(assets);
     const allTransactions = await db.select().from(transactions);
     const allSnapshots = await db.select().from(snapshots).orderBy(asc(snapshots.date));
+    const sectorAllocationCache = await readSectorAllocationCache(db).catch(error => {
+      console.warn("Sector allocation cache unavailable; using configured classifications.", error);
+      return new Map();
+    });
 
     // 3. Calculate Exchange Rate
     let exchangeRate = 3.72; // ברירת מחדל ריאלית להיום במקום 3.7 היבש
@@ -80,6 +86,7 @@ export async function GET(request: Request) {
         quantity,
         value_usd: valueUsd,
         value_ils: valueUsd * exchangeRate,
+        sector_allocation: resolveSectorAllocation(asset.ticker, sectorAllocationCache.get(asset.ticker)),
         capital_profit_usd: profitMetricsAssetUsd.capitalProfit,
         capital_profit_ils: profitMetricsAssetIls.capitalProfit,
         drip_usd: profitMetricsAssetUsd.totalDrip,

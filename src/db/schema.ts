@@ -31,3 +31,10 @@ export const snapshots = sqliteTable("snapshots", {
   total_value: real("total_value"),
   net_invested: real("net_invested"),
 });
+
+export const sectorAllocations = sqliteTable("sector_allocations", {
+  ticker: text("ticker").primaryKey(),
+  weights: text("weights", { mode: "json" }).$type<Record<string, number>>(),
+  refreshed_at: text("refreshed_at"),
+  last_attempt_at: text("last_attempt_at").notNull(),
+});

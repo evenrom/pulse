@@ -3,7 +3,8 @@
 import React, { useState, useMemo } from "react";
 import { Lock, RefreshCw, DollarSign, Activity, AlertCircle, ArrowRight, Calculator, ArrowRightLeft, List, Plus, Trash2 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, ReferenceLine } from 'recharts';
-import { PALETTE, ENGINE_MAP, SECTOR_TO_ENGINE, GEO_BREAKDOWN, SECTOR_BREAKDOWN } from "../lib/config";
+import { PALETTE, ENGINE_MAP, SECTOR_TO_ENGINE, GEO_BREAKDOWN } from "../lib/config";
+import type { SectorAllocation } from "../lib/sector-allocation";
 
 type Asset = {
   ticker: string;
@@ -14,6 +15,7 @@ type Asset = {
   value_ils: number;
   sector?: string;
   asset_class?: string;
+  sector_allocation: SectorAllocation;
   capital_profit_usd: number;
   capital_profit_ils: number;
   total_profit_usd: number;
@@ -92,6 +94,10 @@ type SyncResult = {
   attemptedAt: string;
   updatedTickers: string[];
   failedTickers: { ticker: string; error: string }[];
+  sectorRefresh?: {
+    updatedTickers: string[];
+    failedTickers: { ticker: string; error: string }[];
+  };
 };
 
 type TradeRow = {
@@ -185,7 +191,7 @@ export default function Home() {
       const val = currency === "usd" ? asset.value_usd : asset.value_ils;
       if (val <= 0) return;
 
-      const sectors = SECTOR_BREAKDOWN[asset.ticker] || { 'Other': 1.0 };
+      const sectors = asset.sector_allocation?.weights || { 'Other': 1.0 };
       Object.entries(sectors).forEach(([sec, weight]) => {
         sectorValues[sec] = (sectorValues[sec] || 0) + val * weight;
       });
@@ -240,6 +246,21 @@ export default function Home() {
 
     return { engineData: formattedEngineData, sectorData: formattedSectorData, regionalData: formattedRegionalData };
   }, [portfolioData?.assets, currency]);
+
+  const sectorSourceLabels = {
+    yahoo: "Yahoo Finance",
+    custom: "Custom classification",
+    fallback: "Configured fallback",
+    unclassified: "Unclassified",
+  };
+  const sectorAssets = portfolioData?.assets.filter(asset => asset.quantity > 0) || [];
+  const sectorSources = Array.from(new Set(sectorAssets.map(asset =>
+    sectorSourceLabels[asset.sector_allocation?.source || "unclassified"],
+  )));
+  const fallbackSectorTickers = sectorAssets
+    .filter(asset => !asset.sector_allocation || ["fallback", "unclassified"].includes(asset.sector_allocation.source))
+    .map(asset => asset.ticker);
+  const staleSectorTickers = sectorAssets.filter(asset => asset.sector_allocation?.isStale).map(asset => asset.ticker);
 
   const fetchPortfolio = async (currentPin: string) => {
     try {
@@ -475,7 +496,7 @@ export default function Home() {
             onClick={handleSync}
             disabled={isSyncing}
             className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Update market prices (may take a minute)"
+            title="Update market prices and refresh sector weights when due (may take a minute)"
           >
             <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin" : ""}`} />
             <span className="hidden sm:inline">{isSyncing ? "Updating..." : "Refresh"}</span>
@@ -592,9 +613,10 @@ export default function Home() {
 
       {activeTab === "dashboard" && portfolioData?.assets && portfolioData.assets.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Chart 1: Growth Drivers */}
+          {/* Chart 1: Sector & Engine Allocation */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-            <h3 className="text-xl font-bold text-white mb-6">Growth Drivers</h3>
+            <h3 className="text-xl font-bold text-white mb-2">Sector &amp; Engine Allocation</h3>
+            <p className="text-sm text-slate-400 mb-4">Current sector exposure, grouped into your engines.</p>
             <div className="h-80 w-full flex items-center justify-center">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -685,6 +707,35 @@ export default function Home() {
                   <span className="text-sm font-medium text-white">{entry.pct.toFixed(1)}%</span>
                 </div>
               ))}
+            </div>
+            <div className="mt-5 border-t border-slate-800 pt-3 text-xs text-slate-400 space-y-2">
+              <p>Sources: {sectorSources.join(" · ") || "No holdings"}</p>
+              {fallbackSectorTickers.length > 0 && (
+                <p className="text-amber-400">Yahoo weights unavailable for {fallbackSectorTickers.join(", ")}. Refresh to request an update; configured values are used where available.</p>
+              )}
+              {staleSectorTickers.length > 0 && (
+                <p className="text-amber-400">Refresh overdue for {staleSectorTickers.join(", ")}; showing the last successful Yahoo weights.</p>
+              )}
+              {!!syncResult?.sectorRefresh?.failedTickers.length && (
+                <p className="text-amber-400">Sector refresh failed for {syncResult.sectorRefresh.failedTickers.map(item => item.ticker).join(", ")}. Previous allocations were kept.</p>
+              )}
+              <details>
+                <summary className="cursor-pointer text-slate-300 hover:text-white">Data sources &amp; refresh dates</summary>
+                <ul className="mt-2 space-y-2" aria-label="Sector allocation sources">
+                  {sectorAssets.map(asset => (
+                    <li key={asset.ticker} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                      <span className="font-medium text-slate-300">{asset.ticker}</span>
+                      <span>
+                        {sectorSourceLabels[asset.sector_allocation?.source || "unclassified"]}
+                        {asset.sector_allocation?.lastRefreshed && (
+                          <> · Refreshed {new Date(asset.sector_allocation.lastRefreshed).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}</>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-3 text-slate-500">Yahoo weights refresh weekly during market sync. Dates show when data was retrieved, not the fund&apos;s reporting date. SGOV and IAU use custom classifications.</p>
+              </details>
             </div>
           </div>
 

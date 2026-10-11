@@ -7,6 +7,8 @@ import { assets, transactions, snapshots } from '@/db/schema';
 import { calculateHoldings, calculateNetInvested } from '@/lib/finance';
 import { eq } from 'drizzle-orm';
 import { validatePin } from '@/lib/auth';
+import { refreshSectorAllocationCache } from '@/lib/sector-allocation-cache';
+import { CUSTOM_SECTOR_BREAKDOWN } from '@/lib/config';
 
 async function runSync() {
   // Fetch transactions and calculate holdings early
@@ -28,6 +30,16 @@ async function runSync() {
 
   const updatedTickers: string[] = [];
   const failedTickers: { ticker: string; error: string }[] = [];
+  const activeTickers = allAssets
+    .filter(asset => (holdings[asset.ticker] || 0) > 0 || (asset.target_pct || 0) > 0)
+    .map(asset => asset.ticker);
+  // Run independently of price updates; sector failures must not block prices or snapshots.
+  const sectorRefreshPromise = refreshSectorAllocationCache(db, activeTickers).catch(() => ({
+    updatedTickers: [] as string[],
+    failedTickers: activeTickers
+      .filter(ticker => !CUSTOM_SECTOR_BREAKDOWN[ticker])
+      .map(ticker => ({ ticker, error: 'Sector allocation cache unavailable' })),
+  }));
 
   // 2. Fetch prices from Yahoo Finance and update DB
   for (const asset of allAssets) {
@@ -43,7 +55,8 @@ async function runSync() {
 
     try {
       const response = await fetch(
-        `https://query1.finance.yahoo.com/v8/finance/chart/${asset.ticker}`
+        `https://query1.finance.yahoo.com/v8/finance/chart/${asset.ticker}`,
+        { signal: AbortSignal.timeout(5000), cache: 'no-store' },
       );
 
       if (!response.ok) {
@@ -101,6 +114,7 @@ async function runSync() {
     });
   }
 
+  const sectorRefresh = await sectorRefreshPromise;
   return {
     success: failedTickers.length === 0,
     partial: updatedTickers.length > 0 && failedTickers.length > 0,
@@ -110,6 +124,7 @@ async function runSync() {
     attemptedAt: new Date().toISOString(),
     updatedTickers,
     failedTickers,
+    sectorRefresh,
   };
 }
 

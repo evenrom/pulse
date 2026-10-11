@@ -28,6 +28,13 @@ export const GEO_BREAKDOWN: Record<string, Record<string, number>> = {
   'EIS': { 'Middle East': 1.0 }
 };
 
+// Non-equity funds keep their explicit classification; Yahoo has no sector mix for them.
+export const CUSTOM_SECTOR_BREAKDOWN: Record<string, Record<string, number>> = {
+  SGOV: { 'Cash & Equivalents': 1.0 },
+  IAU: { 'Commodities': 1.0 },
+};
+
+// Initial fallback only, used until a valid Yahoo allocation has been cached.
 export const SECTOR_BREAKDOWN: Record<string, Record<string, number>> = {
   'VOO': {
     'Technology': 0.30,
