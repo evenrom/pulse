@@ -254,9 +254,6 @@ export default function Home() {
     unclassified: "Unclassified",
   };
   const sectorAssets = portfolioData?.assets.filter(asset => asset.quantity > 0) || [];
-  const sectorSources = Array.from(new Set(sectorAssets.map(asset =>
-    sectorSourceLabels[asset.sector_allocation?.source || "unclassified"],
-  )));
   const fallbackSectorTickers = sectorAssets
     .filter(asset => !asset.sector_allocation || ["fallback", "unclassified"].includes(asset.sector_allocation.source))
     .map(asset => asset.ticker);
@@ -709,7 +706,6 @@ export default function Home() {
               ))}
             </div>
             <div className="mt-5 border-t border-slate-800 pt-3 text-xs text-slate-400 space-y-2">
-              <p>Sources: {sectorSources.join(" · ") || "No holdings"}</p>
               {fallbackSectorTickers.length > 0 && (
                 <p className="text-amber-400">Yahoo weights unavailable for {fallbackSectorTickers.join(", ")}. Refresh to request an update; configured values are used where available.</p>
               )}
@@ -741,7 +737,8 @@ export default function Home() {
 
           {/* Chart 2: Regional Split */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-            <h3 className="text-xl font-bold text-white mb-6">Regional Split</h3>
+            <h3 className="text-xl font-bold text-white mb-2">Regional Split</h3>
+            <p className="text-sm text-slate-400 mb-4">Current geographic exposure, grouped by region.</p>
             <div className="h-80 w-full flex items-center justify-center">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
