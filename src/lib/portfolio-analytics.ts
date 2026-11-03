@@ -6,7 +6,7 @@ export type FundHolding = { symbol: string; name: string; country: string; weigh
 export type FundComposition = { holdings: FundHolding[]; asOf: string; source: string; equityWeight: number };
 export type FundProfitPoint = { date: string; usd: number | null; ils: number | null };
 export type RiskContribution = {
-  rows: { ticker: string; weight: number; contribution: number }[];
+  rows: { ticker: string; weight: number; contribution: number; annualizedVolatility: number }[];
   observations: number;
   from: string | null;
   through: string | null;
@@ -83,8 +83,9 @@ export function calculateRiskContribution(assets: { ticker: string; value: numbe
   if (variance < 1e-16) return empty("Portfolio volatility is too small to allocate reliably.", intervals.length);
   const rows = active.map((asset, fund) => {
     const fundMean = mean(matrix[fund]);
+    const fundVariance = matrix[fund].reduce((sum, value) => sum + (value - fundMean) ** 2, 0) / (intervals.length - 1);
     const covariance = portfolio.reduce((sum, value, day) => sum + (value - portfolioMean) * (matrix[fund][day] - fundMean), 0);
-    return { ticker: asset.ticker, weight: weights[fund] * 100, contribution: weights[fund] * covariance / variance * 100 };
+    return { ticker: asset.ticker, weight: weights[fund] * 100, contribution: weights[fund] * covariance / variance * 100, annualizedVolatility: Math.sqrt(fundVariance * 252) * 100 };
   });
   return { rows, observations: intervals.length, from: intervals[0].split("/")[0], through, reason: null };
 }

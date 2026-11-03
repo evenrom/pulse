@@ -35,6 +35,10 @@ test("volatility contributions reconcile to 100%, respect covariances and can be
   assert.ok(Math.abs(result.rows.reduce((sum, row) => sum + row.contribution, 0) - 100) < 1e-9);
   assert.ok(result.rows[1].contribution < 0);
   assert.ok(Math.abs(result.rows[0].contribution - 133.3333333) < 1e-5);
+  const expectedVolatility = Math.sqrt(150 / 149) * 0.01 * Math.sqrt(252) * 100;
+  assert.ok(Math.abs(result.rows[0].annualizedVolatility - expectedVolatility) < 1e-8);
+  // The hedge is equally volatile on its own, despite its negative portfolio contribution.
+  assert.ok(Math.abs(result.rows[0].annualizedVolatility - result.rows[1].annualizedVolatility) < 1e-8);
 });
 
 test("a constant-price cash allocation contributes no volatility and missing/short/stale histories cannot create a partial risk chart", () => {
@@ -43,6 +47,7 @@ test("a constant-price cash allocation contributes no volatility and missing/sho
   const result = calculateRiskContribution(assets, histories, now);
   assert.ok(Math.abs(result.rows[0].contribution - 100) < 1e-8);
   assert.equal(result.rows[1].contribution, 0);
+  assert.equal(result.rows[1].annualizedVolatility, 0);
   histories.delete("CASH");
   assert.equal(calculateRiskContribution(assets, histories, now).rows.length, 0);
   assert.equal(calculateRiskContribution(assets.slice(0, 1), histories, now + 30 * 86400000).rows.length, 0);

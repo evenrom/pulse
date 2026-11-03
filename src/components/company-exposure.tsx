@@ -21,11 +21,14 @@ export function CompanyExposure({ data, loading, error }: { data: Exposure | nul
       </tr>)}</tbody></table></div>
       <div className="border-t border-slate-800 px-6 py-4 text-sm text-slate-300">{partial ? "Listed" : "Top"} {companies.length} companies: <strong>{topWeight.toFixed(2)}%</strong> of your entire portfolio</div>
     </>}
-    {data && <div className="border-t border-slate-800 px-6 py-4 text-xs leading-relaxed text-slate-500">
+    {data && <details className="border-t border-slate-800 px-6 py-4 text-xs leading-relaxed text-slate-400">
+      <summary className="cursor-pointer">Data sources &amp; calculation details</summary>
+      <div className="mt-3 text-slate-500">
       <p>SGOV and IAU remain in the portfolio total and are excluded from the company list. Share classes are combined where identified.</p>
       <p className="mt-1">Equity holdings mapped: {data.coveredPortfolioPct.toFixed(1)}% of the portfolio · Equity funds: {data.equityPortfolioPct.toFixed(1)}%.</p>
       <p className="mt-2">Fund holdings refresh automatically each week; portfolio weights update with your portfolio.</p>
       {data.sources.map(source => <p key={source.ticker} className={source.stale ? "mt-1 text-amber-400" : "mt-1"}>{source.ticker} · {source.source} · Holdings as of {source.asOf} · Retrieved {source.refreshedAt.slice(0, 10)}{source.stale ? " · Refresh overdue; showing last valid data" : ""}</p>)}
-    </div>}
+      </div>
+    </details>}
   </section>;
 }

@@ -14,6 +14,11 @@ The main Portfolio Profit chart remains the primary view. Its periods are `1M`, 
 
 ## Volatility contribution
 
+- Home displays one compact Risk & Return table, ordered by each fund's own annualized volatility. Cumulative USD profit comes from the existing Assets calculation and is signed/color-coded independently of volatility.
+- Each fund's annualized volatility is its sample standard deviation of the shared daily adjusted returns multiplied by `sqrt(252)`, expressed as a percentage.
+- Relative impact combines the two weights into `volatility contribution / portfolio weight`. `1x` means the portfolio-average contribution per invested dollar. Negative contributions appear as "Offsets", with the signed multiplier available in the drawer. This is not the fund's own volatility or a probability of loss; a high multiplier need not be the largest absolute portfolio contribution.
+- Cumulative profit and the one-year risk sample have different horizons; no return-to-risk score is calculated from these unlike periods. Methodology and exact weight figures are in the collapsed drawer.
+
 - Uses current market-value weights and the last calendar year's dividend-adjusted daily USD returns.
 - Aligns matching start/end dates of daily return intervals across **all** active funds. Missing observations are not zero-filled; missing funds are not dropped and weights are not renormalized around them.
 - Requires at least 126 shared returns and a shared closing date no older than seven calendar days.
