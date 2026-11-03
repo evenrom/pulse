@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "test:accounting": "tsx src/lib/fifo.test.ts",
+    "test:analytics": "tsx --test src/lib/portfolio-analytics.test.ts src/lib/analytics-cache.test.ts",
     "test:sectors": "tsx --test src/lib/sector-allocation.test.ts src/lib/yahoo-sectors.test.ts src/lib/sector-allocation-cache.test.ts",
     "reconcile:fifo": "tsx scripts/reconcile-fifo.ts"
   },

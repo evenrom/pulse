@@ -9,6 +9,7 @@ import { eq } from 'drizzle-orm';
 import { validatePin } from '@/lib/auth';
 import { refreshSectorAllocationCache } from '@/lib/sector-allocation-cache';
 import { CUSTOM_SECTOR_BREAKDOWN } from '@/lib/config';
+import { analyticsStartDate, refreshAnalyticsCache } from '@/lib/analytics-cache';
 
 async function runSync() {
   // Fetch transactions and calculate holdings early
@@ -33,6 +34,7 @@ async function runSync() {
   const activeTickers = allAssets
     .filter(asset => (holdings[asset.ticker] || 0) > 0 || (asset.target_pct || 0) > 0)
     .map(asset => asset.ticker);
+  const analyticsRefreshPromise = refreshAnalyticsCache(db, activeTickers, analyticsStartDate(allTxs.map(tx => tx.date))).catch(() => []);
   // Run independently of price updates; sector failures must not block prices or snapshots.
   const sectorRefreshPromise = refreshSectorAllocationCache(db, activeTickers).catch(() => ({
     updatedTickers: [] as string[],
@@ -115,6 +117,7 @@ async function runSync() {
   }
 
   const sectorRefresh = await sectorRefreshPromise;
+  const analyticsRefresh = await analyticsRefreshPromise;
   return {
     success: failedTickers.length === 0,
     partial: updatedTickers.length > 0 && failedTickers.length > 0,
@@ -125,6 +128,7 @@ async function runSync() {
     updatedTickers,
     failedTickers,
     sectorRefresh,
+    analyticsRefresh,
   };
 }
 

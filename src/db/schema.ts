@@ -38,3 +38,10 @@ export const sectorAllocations = sqliteTable("sector_allocations", {
   refreshed_at: text("refreshed_at"),
   last_attempt_at: text("last_attempt_at").notNull(),
 });
+
+export const analyticsCache = sqliteTable("analytics_cache", {
+  key: text("key").primaryKey(),
+  payload: text("payload", { mode: "json" }).$type<unknown>(),
+  refreshed_at: text("refreshed_at"),
+  last_attempt_at: text("last_attempt_at").notNull(),
+});

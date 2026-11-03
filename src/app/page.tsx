@@ -1,10 +1,14 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Lock, RefreshCw, DollarSign, Activity, AlertCircle, ArrowRight, Calculator, ArrowRightLeft, List, Plus, Trash2 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, ReferenceLine } from 'recharts';
 import { PALETTE, ENGINE_MAP, SECTOR_TO_ENGINE, GEO_BREAKDOWN } from "../lib/config";
 import type { SectorAllocation } from "../lib/sector-allocation";
+import type { PortfolioAnalytics } from "../lib/portfolio-analytics";
+import { FundProfitCharts, periodCutoff, type ProfitPeriod } from "../components/fund-profit-charts";
+import { RiskContributionChart } from "../components/risk-contribution-chart";
+import { CompanyExposure } from "../components/company-exposure";
 
 type Asset = {
   ticker: string;
@@ -127,7 +131,28 @@ export default function Home() {
   const [isTrading, setIsTrading] = useState(false);
   const [tradeMessage, setTradeMessage] = useState<{type: "success" | "error", text: string} | null>(null);
 
-  const [historyFilter, setHistoryFilter] = useState<"1W" | "1M" | "1Q" | "1Y" | "ALL">("ALL");
+  const [historyFilter, setHistoryFilter] = useState<ProfitPeriod>("ALL");
+  const [analytics, setAnalytics] = useState<PortfolioAnalytics | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isAuthenticated || !portfolioData) return;
+    const controller = new AbortController();
+    setAnalyticsLoading(true);
+    setAnalyticsError(null);
+    // Reset on a portfolio revision so old weights are never presented beside new holdings.
+    setAnalytics(null);
+    fetch(`/api/analytics?exchangeRate=${encodeURIComponent(portfolioData.metrics.exchangeRate)}`, { headers: { "x-pin": pin }, signal: controller.signal })
+      .then(async response => {
+        if (!response.ok) throw new Error("Analytics are temporarily unavailable. Try Sync again later.");
+        return response.json() as Promise<PortfolioAnalytics>;
+      })
+      .then(data => { if (!controller.signal.aborted) setAnalytics(data); })
+      .catch(() => { if (!controller.signal.aborted) setAnalyticsError("Analytics are temporarily unavailable. Try Sync again later."); })
+      .finally(() => { if (!controller.signal.aborted) setAnalyticsLoading(false); });
+    return () => controller.abort();
+  }, [isAuthenticated, portfolioData, pin]);
 
   const [newCapital, setNewCapital] = useState<string>("");
   const [targetWeights, setTargetWeights] = useState<Record<string, number>>({});
@@ -156,16 +181,10 @@ export default function Home() {
   const filteredHistory = useMemo(() => {
     if (!portfolioData?.history) return [];
 
-    const cutoff = new Date();
-
-    if (historyFilter === "1W") cutoff.setDate(cutoff.getDate() - 7);
-    else if (historyFilter === "1M") cutoff.setMonth(cutoff.getMonth() - 1);
-    else if (historyFilter === "1Q") cutoff.setMonth(cutoff.getMonth() - 3);
-    else if (historyFilter === "1Y") cutoff.setFullYear(cutoff.getFullYear() - 1);
-    else if (historyFilter === "ALL") cutoff.setTime(0);
+    const cutoff = periodCutoff(historyFilter);
 
     return portfolioData.history
-      .filter(item => new Date(item.date) >= cutoff)
+      .filter(item => item.date.slice(0, 10) >= cutoff)
       .map(item => {
         const dateObj = new Date(item.date);
         return {
@@ -542,7 +561,7 @@ export default function Home() {
         </div>
       )}
 
-      {activeTab === "dashboard" && filteredHistory.length > 0 && (
+      {activeTab === "dashboard" && portfolioData && (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-8">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
             <div>
@@ -550,7 +569,7 @@ export default function Home() {
               <p className="text-slate-400 text-sm">Zero = Net Invested</p>
             </div>
             <div className="flex bg-slate-950 rounded-lg p-1 border border-slate-800">
-              {(["1W", "1M", "1Q", "1Y", "ALL"] as const).map(filter => (
+              {(["1M", "1Q", "1Y", "ALL"] as const).map(filter => (
                 <button
                   key={filter}
                   onClick={() => setHistoryFilter(filter)}
@@ -565,7 +584,7 @@ export default function Home() {
               ))}
             </div>
           </div>
-          <div className="h-64 w-full">
+          {filteredHistory.length > 0 ? <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={filteredHistory}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
@@ -604,9 +623,14 @@ export default function Home() {
                 />
               </AreaChart>
             </ResponsiveContainer>
-          </div>
+          </div> : <p className="flex h-64 items-center justify-center text-sm text-slate-400">No portfolio observations in this period. Choose a longer period.</p>}
         </div>
       )}
+
+      {activeTab === "dashboard" && portfolioData && <>
+        <FundProfitCharts data={analytics} currency={currency} period={historyFilter} loading={analyticsLoading} error={analyticsError} />
+        <RiskContributionChart data={analytics?.risk || null} loading={analyticsLoading} error={analyticsError} />
+      </>}
 
       {activeTab === "dashboard" && portfolioData?.assets && portfolioData.assets.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -886,6 +910,8 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {activeTab === "holdings" && <CompanyExposure data={analytics?.exposure || null} loading={analyticsLoading} error={analyticsError} />}
 
       {activeTab === "history" && (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">

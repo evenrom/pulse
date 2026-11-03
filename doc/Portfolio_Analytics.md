@@ -1,0 +1,43 @@
+# Portfolio analytics
+
+The main Portfolio Profit chart remains the primary view. Its periods are `1M`, `1Q`, `1Y`, and `ALL`. Fund detail expands underneath it; company exposures are on Assets. Rebalance and exchange-rate providers/calculations are unchanged.
+
+## Fund profit
+
+- Each active fund has its own percentage chart, with shared time and percentage axes.
+- The numerator and Net Invested denominator use `calculateAssetMetrics`, exactly like the existing portfolio metrics. This is profit on the recorded invested basis, not time-weighted performance.
+- Filters select dates without rebasing to zero. Zero means no total profit relative to that fund's Net Invested.
+- Uses unadjusted-for-dividends closing prices and the recorded BUY/SELL/DRIP ledger. Dividend-adjusted prices are **not** used for profit, avoiding double counting reinvestments.
+- ILS preserves the existing lens: current USD/ILS applied to valuation and recorded transaction rates applied to costs and realized gains. No new FX requests or rate corrections.
+- No percentages are invented for nonpositive invested basis, missing starting history, or a split that cannot be reconciled with the ledger's supported actions.
+- Daily closing observations may differ from the main chart's latest intraday snapshot. Each fund shows its closing date.
+
+## Volatility contribution
+
+- Uses current market-value weights and the last calendar year's dividend-adjusted daily USD returns.
+- Aligns matching start/end dates of daily return intervals across **all** active funds. Missing observations are not zero-filled; missing funds are not dropped and weights are not renormalized around them.
+- Requires at least 126 shared returns and a shared closing date no older than seven calendar days.
+- For portfolio return `p = sum(w_i * r_i)`, contribution is `100 * w_i * Cov(r_i, p) / Var(p)`.
+- Contributions reconcile to 100% before display rounding. They may be negative or exceed 100% when other funds offset volatility. These are retrospective estimates for today's allocation, not historical account-value changes or forecasts.
+- The risk sample is independent of the profit date filter and currency toggle and is explicitly labeled in USD with its sample dates.
+
+## Companies
+
+- Full equity holdings from Vanguard (VOO) and iShares (USMV and IDEV); stocks and REITs are included, cash, rights, and non-equity funds excluded from the company list.
+- Exposure = fund value / **total portfolio value** × company weight in the fund, aggregated across funds. SGOV and IAU remain in the denominator.
+- Ten companies shown initially, expandable to twenty. Alphabet, Berkshire, Fox and News share classes have explicit issuer aliases. Other identifiers retain the country to avoid merging unrelated tickers on different national markets.
+- Provider rounding excesses up to the validation tolerance are reconciled; actual cash residuals are preserved. The UI reports mapped equity exposure and source dates. Missing fund data is explicitly labeled as a partial ranking.
+- Unsupported equity funds are reported as unavailable rather than assigned guessed holdings.
+
+## Refresh and failure behavior
+
+- Additive `analytics_cache` table, initialized idempotently. No edits to existing transactions, prices, snapshots or FX records by the analytics endpoint.
+- Price history refreshes every six hours; compositions every seven days, via authenticated analytics requests and existing market sync. Public provider requests run concurrently with timeouts.
+- Failed attempts retain the last valid payload and its original retrieval date, with one-hour retry backoff. Company source dates are distinguished from retrieval dates.
+- Analytics loads independently after the main portfolio response. A provider failure cannot prevent portfolio rendering.
+
+## Verification
+
+- `npm run test:analytics`: accounting-history cases, covariance allocation, missing/stale data, dividend adjustment, company aggregation, issuer parser validation, cache failure/backoff.
+- `npx tsx scripts/check-analytics-providers.ts`: optional read-only live public-provider smoke check; does not connect to the portfolio database.
+- Existing accounting/sector tests, TypeScript, lint and production build remain applicable.
