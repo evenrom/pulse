@@ -70,3 +70,24 @@ test("failed geography cannot replace valid country data or its retrieval date",
   await refreshAnalyticsCache(db, ["VOO"], "2025-01-01", providers, now + HOLDINGS_REFRESH_MS + 1000);
   assert.equal(attempts, 1);
 });
+
+test("fresh iShares caches upgrade once to include non-equity weights, with failure backoff", async t => {
+  const client = createClient({ url: "file::memory:" }); t.after(() => client.close());
+  const db = drizzle(client);
+  const now = Date.parse("2026-11-03T12:00:00Z");
+  const prices: PriceHistory = { prices: [], requestedFrom: "2025-01-01", splitDates: [] };
+  const legacy: FundComposition = { holdings: [], source: "iShares", asOf: "2026-11-02", equityWeight: 0.9865, geography: { basis: "holdings" } };
+  await refreshAnalyticsCache(db, ["IDEV"], "2025-01-01", { prices: async () => prices, holdings: async () => legacy }, now);
+  let attempts = 0;
+  const fail = { prices: async () => prices, holdings: async () => { attempts++; throw Error("offline"); } };
+  await refreshAnalyticsCache(db, ["IDEV"], "2025-01-01", fail, now + 1000);
+  await refreshAnalyticsCache(db, ["IDEV"], "2025-01-01", fail, now + 2000);
+  assert.equal(attempts, 1);
+  assert.deepEqual((await readAnalyticsCache(db)).get("holdings:v1:IDEV")!.payload, legacy);
+  const upgraded = { ...legacy, nonEquityWeight: 0.0061 };
+  const success = { prices: async () => prices, holdings: async () => { attempts++; return upgraded; } };
+  await refreshAnalyticsCache(db, ["IDEV"], "2025-01-01", success, now + 3601001);
+  await refreshAnalyticsCache(db, ["IDEV"], "2025-01-01", success, now + 3601002);
+  assert.equal(attempts, 2);
+  assert.deepEqual((await readAnalyticsCache(db)).get("holdings:v1:IDEV")!.payload, upgraded);
+});

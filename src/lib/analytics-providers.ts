@@ -85,7 +85,14 @@ export function parseIsharesHoldings(text: string): FundComposition {
   const holdings = rows.slice(headerIndex + 1).filter(row => field(row, "Asset Class") === "Equity").map(row => ({
     symbol: field(row, "Ticker"), name: field(row, "Name"), country: field(row, "Location"), weight: Number(field(row, "Weight (%)").replace(/,/g, "")) / 100,
   }));
-  return { ...validateComposition(holdings, asOf, "iShares"), geography: { basis: "holdings", asOf } };
+  const composition = validateComposition(holdings, asOf, "iShares");
+  const nonEquityWeights = rows.slice(headerIndex + 1)
+    .filter(row => field(row, "Asset Class") && field(row, "Asset Class") !== "Equity")
+    .map(row => Number(field(row, "Weight (%)").replace(/,/g, "")) / 100);
+  if (nonEquityWeights.some(weight => !Number.isFinite(weight))) throw new Error("Invalid non-equity weights; keeping the last valid composition");
+  // Keep the same rounding divisor as the equity holdings. Never call the entire residual cash.
+  const divisor = Math.max(1, holdings.reduce((sum, holding) => sum + holding.weight, 0));
+  return { ...composition, nonEquityWeight: Math.max(0, nonEquityWeights.reduce((sum, weight) => sum + weight, 0)) / divisor, geography: { basis: "holdings", asOf } };
 }
 
 export function parseVanguardHoldings(payload: unknown): FundComposition {

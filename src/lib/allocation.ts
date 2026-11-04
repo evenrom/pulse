@@ -7,11 +7,13 @@ export const ENGINE_COLORS: Record<string, string> = {
 export type AllocationContribution = { ticker: string; pct: number };
 export type SectorSlice = { name: string; pct: number; color: string; opacity: number; contributions: AllocationContribution[] };
 export type EngineAllocation = { name: string; pct: number; color: string; sectors: SectorSlice[] };
+export type CountryAllocation = { name: string; pct: number; contributions: AllocationContribution[] };
 export type RegionalAllocation = {
   equityPortfolioPct: number;
   mappedPct: number;
-  unclassifiedPct: number;
-  regions: { name: string; pct: number; countries: { name: string; pct: number; contributions: AllocationContribution[] }[] }[];
+  residualPct: number;
+  regions: { name: string; pct: number; countries: CountryAllocation[] }[];
+  residuals: { nonEquity: AllocationContribution[]; reportingGap: AllocationContribution[]; missingCountries: AllocationContribution[]; unmappedCountries: CountryAllocation[] };
   outsideEquities: AllocationContribution[];
   missingTickers: string[];
   fundScopeTickers: string[];
@@ -66,25 +68,44 @@ const COUNTRY_TO_REGION = new Map(Object.entries(COUNTRY_GROUPS).flatMap(([regio
 const COUNTRY_ALIASES: Record<string, string> = { US: "United States", USA: "United States", "United States of America": "United States", UK: "United Kingdom", "Great Britain": "United Kingdom", "Korea (South)": "South Korea", "Korea, Republic of": "South Korea", "Republic of Korea": "South Korea", "Czechia": "Czech Republic", "Russian Federation": "Russia", "Hong Kong SAR": "Hong Kong" };
 export function normalizeCountry(value: string) { const name = value.trim(); return COUNTRY_ALIASES[name] || name; }
 
+/** A whole missing fund or at least 1% missing/unmapped equity-fund value merits a visible notice. */
+export function hasMaterialCountryGap(data: RegionalAllocation) {
+  return data.missingTickers.length > 0 || data.residuals.missingCountries.reduce((sum, row) => sum + row.pct, 0) + data.residuals.unmappedCountries.reduce((sum, row) => sum + row.pct, 0) >= 1;
+}
+
 /** All country/region percentages share the complete equity-fund denominator, including unknowns. */
 export function aggregateRegionalAllocation(assets: { ticker: string; value: number }[], compositions: Map<string, FundComposition>): RegionalAllocation {
   const active = assets.filter(asset => Number.isFinite(asset.value) && asset.value > 0);
   const total = active.reduce((sum, asset) => sum + asset.value, 0);
   const equities = active.filter(asset => !["SGOV", "IAU"].includes(asset.ticker));
   const equityTotal = equities.reduce((sum, asset) => sum + asset.value, 0);
-  const result: RegionalAllocation = { equityPortfolioPct: total > 0 ? equityTotal / total * 100 : 0, mappedPct: 0, unclassifiedPct: 0, regions: [], outsideEquities: active.filter(asset => ["SGOV", "IAU"].includes(asset.ticker)).map(asset => ({ ticker: asset.ticker, pct: asset.value / total * 100 })), missingTickers: [], fundScopeTickers: [], sources: [] };
+  const result: RegionalAllocation = { equityPortfolioPct: total > 0 ? equityTotal / total * 100 : 0, mappedPct: 0, residualPct: 0, regions: [], residuals: { nonEquity: [], reportingGap: [], missingCountries: [], unmappedCountries: [] }, outsideEquities: active.filter(asset => ["SGOV", "IAU"].includes(asset.ticker)).map(asset => ({ ticker: asset.ticker, pct: asset.value / total * 100 })), missingTickers: [], fundScopeTickers: [], sources: [] };
   const regions = new Map<string, Map<string, Map<string, number>>>();
+  const unmapped = new Map<string, Map<string, number>>();
+  function remainder(kind: "nonEquity" | "reportingGap" | "missingCountries", pct: number, ticker: string) {
+    if (!(pct > 1e-9)) return;
+    const previous = result.residuals[kind].find(row => row.ticker === ticker);
+    if (previous) previous.pct += pct;
+    else result.residuals[kind].push({ ticker, pct });
+    result.residualPct += pct;
+  }
   function add(country: string, pct: number, ticker: string) {
     if (!(pct > 1e-9)) return;
     const knownName = normalizeCountry(country);
-    const region = !knownName || knownName === "-" ? "Unclassified" : COUNTRY_TO_REGION.get(knownName) || "Unmapped countries";
-    const label = region === "Unclassified" ? "Missing countries / fund cash" : knownName;
+    if (!knownName || knownName === "-") { remainder("missingCountries", pct, ticker); return; }
+    const region = COUNTRY_TO_REGION.get(knownName);
+    if (!region) {
+      if (!unmapped.has(knownName)) unmapped.set(knownName, new Map());
+      const funds = unmapped.get(knownName)!;
+      funds.set(ticker, (funds.get(ticker) || 0) + pct);
+      result.residualPct += pct;
+      return;
+    }
     if (!regions.has(region)) regions.set(region, new Map());
     const countries = regions.get(region)!;
-    if (!countries.has(label)) countries.set(label, new Map());
-    countries.get(label)!.set(ticker, (countries.get(label)!.get(ticker) || 0) + pct);
-    if (region === "Unclassified" || region === "Unmapped countries") result.unclassifiedPct += pct;
-    else result.mappedPct += pct;
+    if (!countries.has(knownName)) countries.set(knownName, new Map());
+    countries.get(knownName)!.set(ticker, (countries.get(knownName)!.get(ticker) || 0) + pct);
+    result.mappedPct += pct;
   }
   for (const asset of equities) {
     const composition = compositions.get(asset.ticker);
@@ -103,8 +124,16 @@ export function aggregateRegionalAllocation(assets: { ticker: string; value: num
       allocated = Math.max(0, Math.min(1, composition.equityWeight));
       add(composition.geography.country, fundPct * allocated, asset.ticker);
       result.fundScopeTickers.push(asset.ticker);
-    } else result.missingTickers.push(asset.ticker);
-    add("", fundPct * Math.max(0, 1 - allocated), asset.ticker);
+    } else {
+      result.missingTickers.push(asset.ticker);
+      remainder("missingCountries", fundPct, asset.ticker);
+      continue;
+    }
+    const residual = Math.max(0, 1 - allocated);
+    const reportedNonEquity = composition?.nonEquityWeight;
+    const nonEquity = typeof reportedNonEquity === "number" && Number.isFinite(reportedNonEquity) ? Math.min(residual, Math.max(0, reportedNonEquity)) : 0;
+    remainder("nonEquity", fundPct * nonEquity, asset.ticker);
+    remainder("reportingGap", fundPct * Math.max(0, residual - nonEquity), asset.ticker);
   }
   result.regions = Array.from(regions, ([name, countries]) => {
     const rows = Array.from(countries, ([country, funds]) => {
@@ -112,6 +141,10 @@ export function aggregateRegionalAllocation(assets: { ticker: string; value: num
       return { name: country, pct: contributions.reduce((sum, item) => sum + item.pct, 0), contributions };
     }).sort((a, b) => b.pct - a.pct);
     return { name, pct: rows.reduce((sum, country) => sum + country.pct, 0), countries: rows };
+  }).sort((a, b) => b.pct - a.pct);
+  result.residuals.unmappedCountries = Array.from(unmapped, ([name, funds]) => {
+    const contributions = Array.from(funds, ([ticker, pct]) => ({ ticker, pct })).sort((a, b) => b.pct - a.pct);
+    return { name, pct: contributions.reduce((sum, row) => sum + row.pct, 0), contributions };
   }).sort((a, b) => b.pct - a.pct);
   return result;
 }

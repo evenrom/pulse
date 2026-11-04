@@ -22,7 +22,7 @@
 
 ### 3.3 Assets & Allocation (Composition)
 - **Sector & Engine Allocation**: Stacked horizontal engine bars, with stable sector colors and selectable ETF contributions. All percentages use the entire portfolio. SGOV and IAU appear as T-Bills and Gold; other funds’ cash stays under Other. Yahoo Finance sector weights refresh weekly; fallbacks, stale data and source dates are disclosed.
-- **Regional Split**: Expandable region/country bars derived from issuer holding countries and current equity-fund values. VOO uses its verified published US fund-market classification because Vanguard’s holdings feed omits countries. Unknown countries and fund cash remain visible. SGOV and IAU are shown separately outside equities. Country lists initially show five, expandable to all; selecting a country reveals ETF contributions. Compositions refresh automatically weekly, retaining last valid data on failure.
+- **Regional Split**: Expandable region/country bars derived from issuer holding countries and current equity-fund values. VOO uses its verified published US fund-market classification because Vanguard’s holdings feed omits countries. Only mapped regions appear in the chart, without renormalizing their percentages. The drawer separates reported non-equity holdings, reporting/rounding differences and missing country data; a visible notice is reserved for material country gaps. SGOV and IAU are shown separately outside equities. Country lists initially show five, expandable to all; selecting a country reveals ETF contributions. Compositions refresh automatically weekly, retaining last valid data on failure.
 - **High-Density Table**: List of holdings with expandable details.
 
 ### 3.4 Trade & History

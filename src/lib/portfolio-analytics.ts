@@ -5,6 +5,7 @@ export type PriceHistory = { prices: DailyPrice[]; requestedFrom: string; splitD
 export type FundHolding = { symbol: string; name: string; country: string; weight: number };
 export type FundComposition = {
   holdings: FundHolding[]; asOf: string; source: string; equityWeight: number;
+  nonEquityWeight?: number;
   geography?: { basis: "holdings" | "fund-scope" | "unavailable"; country?: string; asOf?: string };
 };
 export type FundProfitPoint = { date: string; usd: number | null; ils: number | null };
