@@ -24,7 +24,7 @@ function placeLabels(points: PlottedPoint[], width: number, bottom: number) {
   const labels = new Map<string, Label>();
   const placed: { x: number; y: number; width: number; height: number }[] = [];
   for (const point of [...points].sort((a, b) => Number(b.isPortfolio) - Number(a.isPortfolio))) {
-    const labelWidth = point.name.length * 6.5 + 3;
+    const labelWidth = point.name.length * 7.5 + 3;
     const right = point.x + point.radius + 6;
     const left = point.x - point.radius - labelWidth - 6;
     const center = point.x - labelWidth / 2;
@@ -33,16 +33,16 @@ function placeLabels(points: PlottedPoint[], width: number, bottom: number) {
       [right, point.y + point.radius + 15], [left, point.y + point.radius + 15],
       [center, point.y - point.radius - 12], [center, point.y + point.radius + 22],
       [center, point.y - 45], [center, point.y + 45], [center, point.y - 65],
-    ].map(([x, y]) => ({ x: Math.max(53, Math.min(width - labelWidth - 8, x)), y: Math.max(18, Math.min(bottom - 5, y)), width: labelWidth }));
+    ].map(([x, y]) => ({ x: Math.max(61, Math.min(width - labelWidth - 8, x)), y: Math.max(24, Math.min(bottom - 5, y)), width: labelWidth }));
     const score = (label: Label) => {
-      const box = { ...label, y: label.y - 12, height: 16 };
+      const box = { ...label, y: label.y - 14, height: 18 };
       const labelOverlap = placed.reduce((sum, existing) => sum + overlap(box, existing), 0);
       const pointOverlap = points.reduce((sum, other) => sum + overlap(box, { x: other.x - other.radius - 3, y: other.y - other.radius - 3, width: other.radius * 2 + 6, height: other.radius * 2 + 6 }), 0);
       return labelOverlap * 10 + pointOverlap * 5 + Math.hypot(label.x + label.width / 2 - point.x, label.y - point.y) * 0.05;
     };
     const label = candidates.reduce((best, candidate) => score(candidate) < score(best) ? candidate : best);
     labels.set(point.id, label);
-    placed.push({ ...label, y: label.y - 12, height: 16 });
+    placed.push({ ...label, y: label.y - 14, height: 18 });
   }
   return labels;
 }
@@ -69,23 +69,20 @@ export function RiskReturnScatter({ points }: { points: RiskReturnPoint[] }) {
     const span = Math.max(10, Math.max(0, ...values) - Math.min(0, ...values));
     const minY = Math.floor(Math.min(-2, ...values.map(value => value - span * 0.15)) / 5) * 5;
     const maxY = Math.ceil(Math.max(2, ...values.map(value => value + span * 0.15)) / 5) * 5;
-    const left = 50, right = width - 22, top = 22, bottom = 258;
+    const height = width < 480 ? 340 : 400;
+    const left = 58, right = width - 24, top = 32, bottom = height - 52;
     const x = (value: number) => left + value / maxX * (right - left);
     const y = (value: number) => bottom - (value - minY) / (maxY - minY) * (bottom - top);
     const largestWeight = Math.max(1, ...valid.filter(point => !point.isPortfolio).map(point => point.weight));
     const plotted = valid.map(point => ({ ...point, x: x(point.volatility), y: y(point.profitPct), radius: point.isPortfolio ? 8 : Math.max(4, 12 * Math.sqrt(Math.max(0, point.weight) / largestWeight)) }));
-    return { points: plotted, labels: placeLabels(plotted, width, bottom), maxX, minY, maxY, left, right, top, bottom, x, y };
+    return { points: plotted, labels: placeLabels(plotted, width, bottom), maxX, minY, maxY, left, right, top, bottom, height, x, y };
   }, [points, width]);
   const selected = plot.points.find(point => point.id === selectedId) || plot.points.find(point => point.isPortfolio) || plot.points[0];
   const selectedBand = classifyVolatility(selected?.volatility);
 
-  return <div ref={container} className="min-w-0 px-4 pb-3 pt-4 sm:px-5">
-    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-      <h4 className="text-sm font-medium text-slate-200">Volatility vs. your cumulative profit</h4>
-      <span className="text-[10px] text-slate-500">● Fund · ◆ Total Portfolio</span>
-    </div>
+  return <div ref={container} className="min-w-0 px-4 pb-4 sm:px-6">
     {!plot.points.length ? <p className="py-12 text-sm text-slate-400">No comparable profit and volatility observations yet.</p> : <>
-      <svg viewBox={`0 0 ${width} 300`} className="block w-full" aria-label="Annualized volatility on the horizontal axis and your cumulative profit on the vertical axis. Select a fund or the portfolio for details.">
+      <svg viewBox={`0 0 ${width} ${plot.height}`} className="block w-full" aria-label="Risk and return chart">
         {VOLATILITY_BANDS.map(band => {
           const end = Math.min(plot.maxX, band.max);
           return end > band.min ? <rect key={band.key} x={plot.x(band.min)} y={plot.top} width={plot.x(end) - plot.x(band.min)} height={plot.bottom - plot.top} fill={band.color} opacity={0.055} /> : null;
@@ -95,15 +92,15 @@ export function RiskReturnScatter({ points }: { points: RiskReturnPoint[] }) {
           const yValue = plot.minY + (plot.maxY - plot.minY) * index / 4;
           return <g key={index} aria-hidden="true">
             <line x1={plot.x(xValue)} x2={plot.x(xValue)} y1={plot.top} y2={plot.bottom} stroke="#334155" strokeDasharray="3 4" />
-            <line x1={plot.left} x2={plot.right} y1={plot.y(yValue)} y2={plot.y(yValue)} stroke="#334155" strokeDasharray="3 4" />
-            <text x={plot.x(xValue)} y={plot.bottom + 18} textAnchor="middle" fill="#94a3b8" fontSize={10}>{Number(xValue.toFixed(1))}%</text>
-            <text x={plot.left - 7} y={plot.y(yValue) + 3} textAnchor="end" fill="#94a3b8" fontSize={10}>{Number(yValue.toFixed(1))}%</text>
+            {Math.abs(plot.y(yValue) - plot.y(0)) > 20 && <line x1={plot.left} x2={plot.right} y1={plot.y(yValue)} y2={plot.y(yValue)} stroke="#334155" strokeDasharray="3 4" />}
+            <text x={plot.x(xValue)} y={plot.bottom + 20} textAnchor="middle" fill="#94a3b8" fontSize={12}>{Number(xValue.toFixed(1))}%</text>
+            {Math.abs(plot.y(yValue) - plot.y(0)) > 20 && <text x={plot.left - 7} y={plot.y(yValue) + 4} textAnchor="end" fill="#94a3b8" fontSize={12}>{Number(yValue.toFixed(1))}%</text>}
           </g>;
         })}
         <line x1={plot.left} x2={plot.right} y1={plot.y(0)} y2={plot.y(0)} stroke="#cbd5e1" strokeWidth={1.2} />
-        <text x={plot.right - 3} y={plot.y(0) - 5} textAnchor="end" fill="#cbd5e1" fontSize={10}>0% profit</text>
-        <text x={plot.left} y={12} fill="#94a3b8" fontSize={10}>Cumulative profit (%)</text>
-        <text x={(plot.left + plot.right) / 2} y={296} textAnchor="middle" fill="#94a3b8" fontSize={11}>Annualized volatility (%)</text>
+        <text x={plot.left - 7} y={plot.y(0) + 4} textAnchor="end" fill="#e2e8f0" fontSize={12}>0%</text>
+        <text x={plot.left} y={18} fill="#e2e8f0" fontSize={14} fontWeight={500}>Profit (%)</text>
+        <text x={(plot.left + plot.right) / 2} y={plot.height - 8} textAnchor="middle" fill="#e2e8f0" fontSize={14} fontWeight={500}>Volatility (%)</text>
         {plot.points.map(point => {
           const band = classifyVolatility(point.volatility)!;
           const label = plot.labels.get(point.id)!;
@@ -113,7 +110,7 @@ export function RiskReturnScatter({ points }: { points: RiskReturnPoint[] }) {
             <title>{description}</title>
             <line x1={point.x} y1={point.y} x2={Math.max(label.x, Math.min(label.x + label.width, point.x))} y2={label.y - 5} stroke="#64748b" opacity={0.65} pointerEvents="none" />
             {point.isPortfolio ? <path d={`M ${point.x} ${point.y - 8} l 8 8 l -8 8 l -8 -8 Z`} fill={band.color} stroke="white" strokeWidth={2} /> : <circle cx={point.x} cy={point.y} r={point.radius} fill={band.color} fillOpacity={active ? 1 : 0.8} stroke={active ? "white" : "#0f172a"} strokeWidth={1.5} />}
-            <text x={label.x} y={label.y} fill={point.isPortfolio ? "#ffffff" : "#cbd5e1"} fontSize={12} fontWeight={point.isPortfolio ? 600 : 400}>{point.name}</text>
+            <text x={label.x} y={label.y} fill={point.isPortfolio ? "#ffffff" : "#cbd5e1"} fontSize={14} fontWeight={point.isPortfolio ? 600 : 400}>{point.name}</text>
           </g>;
         })}
         {/* A visual-only overlay keeps the active marker visible without changing keyboard tab order. */}
@@ -127,6 +124,5 @@ export function RiskReturnScatter({ points }: { points: RiskReturnPoint[] }) {
         <strong className="text-slate-100">{selected.name}</strong><span className={selected.profitPct > 0 ? "text-emerald-400" : selected.profitPct < 0 ? "text-red-400" : "text-slate-300"}>{signed(selected.profitPct)} profit</span><span className={selectedBand?.textClass}>{formatVolatility(selected.volatility)} · {selectedBand?.label} volatility</span>{!selected.isPortfolio && <span className="text-slate-400">{selected.weight.toFixed(1)}% of portfolio</span>}
       </div>}
     </>}
-    <p className="mt-2 text-[10px] leading-relaxed text-slate-500">Profit: since your first investment in each holding. Volatility: the shared trailing-year sample. Different periods; no efficiency score or investment ranking. Circle area approximates fund weight; small circles have a minimum size.</p>
   </div>;
 }
