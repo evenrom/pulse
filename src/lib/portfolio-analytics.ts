@@ -3,7 +3,10 @@ import { calculateAssetMetrics, calculateHoldings, type Transaction } from "./fi
 export type DailyPrice = { date: string; close: number; adjustedClose: number };
 export type PriceHistory = { prices: DailyPrice[]; requestedFrom: string; splitDates: string[] };
 export type FundHolding = { symbol: string; name: string; country: string; weight: number };
-export type FundComposition = { holdings: FundHolding[]; asOf: string; source: string; equityWeight: number };
+export type FundComposition = {
+  holdings: FundHolding[]; asOf: string; source: string; equityWeight: number;
+  geography?: { basis: "holdings" | "fund-scope" | "unavailable"; country?: string; asOf?: string };
+};
 export type FundProfitPoint = { date: string; usd: number | null; ils: number | null };
 export type RiskContribution = {
   rows: { ticker: string; weight: number; contribution: number | null; annualizedVolatility: number }[];
@@ -24,6 +27,7 @@ export type PortfolioAnalytics = {
   funds: { ticker: string; points: FundProfitPoint[]; reason: string | null; through: string | null; stale: boolean }[];
   risk: RiskContribution;
   exposure: CompanyExposure;
+  regional: import("./allocation").RegionalAllocation;
   warnings: string[];
 };
 

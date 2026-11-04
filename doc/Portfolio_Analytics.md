@@ -38,6 +38,16 @@ The main Portfolio Profit chart remains the primary view. Its periods are `1M`, 
 - Provider rounding excesses up to the validation tolerance are reconciled; actual cash residuals are preserved. The UI reports mapped equity exposure and source dates. Missing fund data is explicitly labeled as a partial ranking.
 - Unsupported equity funds are reported as unavailable rather than assigned guessed holdings.
 
+## Sector engines and regional allocation
+
+- Home uses stacked horizontal engine bars with a shared scale. Segment/name selection shows each ETF’s contribution to the sector as a percentage of the entire portfolio. Stable engine colors and sector tints do not change with ranking.
+- SGOV and IAU appear as T-Bills and Gold under Gold & T-Bills. Cash and unknown balances in other funds stay under Other; they are not relabeled Treasury bills.
+- Regional percentages use the full current value of equity funds, including their cash/unknown balances. SGOV and IAU are excluded from this denominator and shown separately as percentages of the whole portfolio. Region/country/ETF contribution percentages use the same equity denominator.
+- iShares country attribution comes from the existing full-holdings CSV Location field. The old fixed per-ETF geographic weights are removed. Named country-to-region groups are presentation choices; unrecognized country names remain visible under Unmapped countries, missing country/fund-cash residuals under Unclassified. Known countries are not inflated to hide these balances.
+- Vanguard’s VOO holdings response has no per-holding country field. Its US allocation uses an explicitly labeled fund-scope fallback, verified against the official product page’s `overview.assetClass = Domestic Stock - General`. This is market scope, not a measured country for each company, and is not inferred from security identifiers or exchange listings. Unavailable verification leaves VOO unclassified, or retains a previously verified composition and its original date.
+- Region rows expand into countries (five initially, expandable to all); country selection shows ETF contributions. Countries follow provider classifications, not company revenue locations. Source, reporting/retrieval dates, fallback basis and stale status are in the disclosure.
+- Cached compositions without geography metadata are upgraded on the next analytics request without waiting a full week. Failed upgrades preserve the payload and back off for an hour. Initial holdings with unavailable geography remain usable for company exposure while geographic verification retries hourly.
+
 ## Refresh and failure behavior
 
 - Additive `analytics_cache` table, initialized idempotently. No edits to existing transactions, prices, snapshots or FX records by the analytics endpoint.

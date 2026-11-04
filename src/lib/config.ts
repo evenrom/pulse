@@ -6,7 +6,7 @@ export const ENGINE_MAP: Record<string, string[]> = {
   'Capital': ['Financials', 'Real Estate'],
   'Production': ['Industrials', 'Basic Materials'],
   'Energy': ['Energy', 'Utilities'],
-  'Stability': ['Commodities', 'Cash & Equivalents']
+  'Gold & T-Bills': ['Gold', 'T-Bills']
 };
 
 export const SECTOR_TO_ENGINE: Record<string, string> = Object.entries(ENGINE_MAP).reduce((acc, [engine, sectors]) => {
@@ -15,18 +15,6 @@ export const SECTOR_TO_ENGINE: Record<string, string> = Object.entries(ENGINE_MA
   });
   return acc;
 }, {} as Record<string, string>);
-
-export const GEO_BREAKDOWN: Record<string, Record<string, number>> = {
-  'VOO': { 'North America': 1.0 },
-  'USMV': { 'North America': 1.0 },
-  'SGOV': { 'North America': 1.0 },
-  'IAU': { 'Commodities': 1.0 },
-  'VEA': { 'North America': 0.112, 'Europe': 0.519, 'Asia & Pacific': 0.352, 'Middle East': 0.011 },
-  'EFAV': { 'Europe': 0.4836, 'Asia & Pacific': 0.4365, 'Middle East': 0.0348 },
-  'IDEV': { 'Europe': 0.5274, 'Asia & Pacific': 0.3088, 'North America': 0.1160, 'Middle East': 0.0144 },
-  'VEU': { 'Europe': 0.45, 'Asia & Pacific': 0.40, 'North America': 0.08, 'Middle East': 0.02 },
-  'EIS': { 'Middle East': 1.0 }
-};
 
 // Non-equity funds keep their explicit classification; Yahoo has no sector mix for them.
 export const CUSTOM_SECTOR_BREAKDOWN: Record<string, Record<string, number>> = {

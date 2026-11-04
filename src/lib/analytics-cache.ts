@@ -40,10 +40,17 @@ export async function refreshAnalyticsCache(
     const entry = cache.get(job.key);
     const interval = job.kind === "prices" ? PRICE_REFRESH_MS : HOLDINGS_REFRESH_MS;
     const needsEarlierHistory = job.kind === "prices" && (entry?.payload as PriceHistory | null)?.requestedFrom && (entry!.payload as PriceHistory).requestedFrom > from;
-    if (!needsEarlierHistory && entry?.payload && now - Date.parse(entry.refreshed_at || "") < interval) return { key: job.key, error: null };
-    if (entry && now - Date.parse(entry.last_attempt_at) < RETRY_MS) return { key: job.key, error: entry.payload ? null : "Provider retry scheduled" };
+    const oldGeography = job.kind === "holdings" ? (entry?.payload as FundComposition | undefined)?.geography : undefined;
+    const missingCountryMetadata = job.kind === "holdings" && Boolean(entry?.payload) && !oldGeography;
+    const needsCountryMetadata = missingCountryMetadata || oldGeography?.basis === "unavailable";
+    if (!needsEarlierHistory && !needsCountryMetadata && entry?.payload && now - Date.parse(entry.refreshed_at || "") < interval) return { key: job.key, error: null };
+    const upgradeSuccessfulLegacy = missingCountryMetadata && entry?.last_attempt_at === entry?.refreshed_at;
+    if (!upgradeSuccessfulLegacy && entry && now - Date.parse(entry.last_attempt_at) < RETRY_MS) return { key: job.key, error: entry.payload ? null : "Provider retry scheduled" };
     try {
       const payload: PriceHistory | FundComposition = job.kind === "prices" ? await providers.prices(job.ticker, from) : await providers.holdings(job.ticker);
+      if (job.kind === "holdings" && oldGeography && oldGeography.basis !== "unavailable" && (payload as FundComposition).geography?.basis === "unavailable") {
+        throw new Error("Country provider unavailable; keeping the last valid composition and its date");
+      }
       await database.insert(analyticsCache).values({ key: job.key, payload, refreshed_at: attemptedAt, last_attempt_at: attemptedAt }).onConflictDoUpdate({
         target: analyticsCache.key, set: { payload, refreshed_at: attemptedAt, last_attempt_at: attemptedAt },
       });

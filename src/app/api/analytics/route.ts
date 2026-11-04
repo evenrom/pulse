@@ -5,6 +5,7 @@ import { validatePin } from "@/lib/auth";
 import { calculateHoldings } from "@/lib/finance";
 import { analyticsStartDate, HOLDINGS_REFRESH_MS, readAnalyticsCache, refreshAnalyticsCache } from "@/lib/analytics-cache";
 import { aggregateCompanyExposure, buildFundProfitHistory, calculateRiskContribution, type FundComposition, type PortfolioAnalytics, type PriceHistory } from "@/lib/portfolio-analytics";
+import { aggregateRegionalAllocation } from "@/lib/allocation";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -49,8 +50,10 @@ export async function GET(request: Request) {
       return entry?.refreshed_at && composition ? [{ ticker: asset.ticker, source: composition.source, asOf: composition.asOf, refreshedAt: entry.refreshed_at, stale: Date.now() - Date.parse(entry.refreshed_at) >= HOLDINGS_REFRESH_MS }] : [];
     });
     const risk = calculateRiskContribution(values, histories);
+    const regional = aggregateRegionalAllocation(values, compositions);
+    regional.sources = exposure.sources.map(source => ({ ...source, basis: compositions.get(source.ticker)?.geography?.basis || (source.source === "iShares" ? "holdings" : "unavailable") }));
     if (active.some(asset => !(Number(asset.current_price) > 0))) { risk.rows = []; risk.annualizedPortfolioVolatility = null; risk.reason = "Current prices are missing for one or more holdings."; }
-    return NextResponse.json({ funds, risk, exposure, warnings } satisfies PortfolioAnalytics, { headers });
+    return NextResponse.json({ funds, risk, exposure, regional, warnings } satisfies PortfolioAnalytics, { headers });
   } catch (error) {
     console.error("Portfolio analytics error:", error);
     return NextResponse.json({ error: "Analytics are temporarily unavailable. Your portfolio is still available." }, { status: 503, headers });

@@ -80,11 +80,12 @@ export function parseIsharesHoldings(text: string): FundComposition {
   const headerIndex = rows.findIndex(row => row.includes("Ticker") && row.includes("Weight (%)") && row.includes("Asset Class"));
   if (headerIndex < 0) throw new Error("Holdings columns are missing");
   const header = rows[headerIndex];
+  if (!header.includes("Location")) throw new Error("Holding country column is missing; keeping the last valid composition");
   const field = (row: string[], name: string) => row[header.indexOf(name)] || "";
   const holdings = rows.slice(headerIndex + 1).filter(row => field(row, "Asset Class") === "Equity").map(row => ({
     symbol: field(row, "Ticker"), name: field(row, "Name"), country: field(row, "Location"), weight: Number(field(row, "Weight (%)").replace(/,/g, "")) / 100,
   }));
-  return validateComposition(holdings, asOf, "iShares");
+  return { ...validateComposition(holdings, asOf, "iShares"), geography: { basis: "holdings", asOf } };
 }
 
 export function parseVanguardHoldings(payload: unknown): FundComposition {
@@ -92,7 +93,19 @@ export function parseVanguardHoldings(payload: unknown): FundComposition {
   if (!details?.equityHoldings?.length) throw new Error("Vanguard equity holdings are missing");
   // The equity bucket also includes contingent-value rights without company weights.
   const holdings = details.equityHoldings.filter(row => row.securityType === "EQ.STOCK" || row.securityType === "EQ.REIT").map(row => ({ symbol: row.ticker || "", name: row.securityLongDescription || "", country: "United States", weight: Number(row.marketValuePercentage?.replace("%", "")) / 100 }));
-  return validateComposition(holdings, isoDate(details.asOfDate || ""), "Vanguard");
+  return { ...validateComposition(holdings, isoDate(details.asOfDate || ""), "Vanguard"), geography: { basis: "unavailable" } };
+}
+
+/** Verify the published fund scope rather than pretending Vanguard supplies per-holding countries. */
+export function parseVanguardGeography(html: string): NonNullable<FundComposition["geography"]> {
+  const encoded = html.match(/data-vgn-funds-profile\s*=\s*'([^']+)'/)?.[1];
+  if (!encoded) return { basis: "unavailable" };
+  try {
+    const decoded = encoded.replace(/&#(\d+);/g, (_, code: string) => String.fromCharCode(Number(code))).replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+    const profile = JSON.parse(decoded) as { overview?: { assetClass?: string } };
+    if (profile.overview?.assetClass !== "Domestic Stock - General") return { basis: "unavailable" };
+    return { basis: "fund-scope", country: "United States" };
+  } catch { return { basis: "unavailable" }; }
 }
 
 const ISHARES: Record<string, string> = {
@@ -101,7 +114,13 @@ const ISHARES: Record<string, string> = {
 };
 
 export async function fetchFundComposition(ticker: string): Promise<FundComposition> {
-  if (ticker === "VOO") return parseVanguardHoldings(await (await get("https://investor.vanguard.com/irr/funds/profile/VOO-AdditionalFundData")).json());
+  if (ticker === "VOO") {
+    const [payload, scope] = await Promise.all([
+      get("https://investor.vanguard.com/irr/funds/profile/VOO-AdditionalFundData").then(response => response.json()),
+      get("https://investor.vanguard.com/investment-products/etfs/profile/voo").then(response => response.text()).then(parseVanguardGeography).catch(() => ({ basis: "unavailable" as const })),
+    ]);
+    return { ...parseVanguardHoldings(payload), geography: scope };
+  }
   if (!ISHARES[ticker]) throw new Error(`Full holdings are not configured for ${ticker}`);
   return parseIsharesHoldings(await (await get(`https://www.ishares.com/us/products/${ISHARES[ticker]}/latest-holdings.csv`)).text());
 }

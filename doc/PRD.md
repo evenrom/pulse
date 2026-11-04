@@ -21,8 +21,8 @@
 - **Equation Subtext**: Breakdown of Capital Profit vs. DRIP.
 
 ### 3.3 Assets & Allocation (Composition)
-- **Sector & Engine Allocation**: Double-doughnut charts of current exposure. Yahoo Finance sector weights are cached in Turso and refreshed weekly through market sync; SGOV and IAU retain custom classifications. Initial configured weights are labelled as fallback until the first successful refresh. Sources and retrieval dates are shown on the dashboard.
-- **Regional Split**: Horizontal bar chart for geographic exposure.
+- **Sector & Engine Allocation**: Stacked horizontal engine bars, with stable sector colors and selectable ETF contributions. All percentages use the entire portfolio. SGOV and IAU appear as T-Bills and Gold; other funds’ cash stays under Other. Yahoo Finance sector weights refresh weekly; fallbacks, stale data and source dates are disclosed.
+- **Regional Split**: Expandable region/country bars derived from issuer holding countries and current equity-fund values. VOO uses its verified published US fund-market classification because Vanguard’s holdings feed omits countries. Unknown countries and fund cash remain visible. SGOV and IAU are shown separately outside equities. Country lists initially show five, expandable to all; selecting a country reveals ETF contributions. Compositions refresh automatically weekly, retaining last valid data on failure.
 - **High-Density Table**: List of holdings with expandable details.
 
 ### 3.4 Trade & History
