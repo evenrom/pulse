@@ -3,6 +3,7 @@ import test from "node:test";
 import { aggregateCompanyExposure, buildFundProfitHistory, calculateRiskContribution, type DailyPrice, type FundComposition, type PriceHistory } from "./portfolio-analytics";
 import { parseIsharesHoldings, parseVanguardHoldings, parseYahooHistory } from "./analytics-providers";
 import type { Transaction } from "./finance";
+import { classifyVolatility, formatVolatility } from "./volatility";
 
 const trade = (values: Partial<Transaction>): Transaction => ({ id: "tx", ticker: "VOO", action: "BUY", date: "2026-01-02", quantity: 10, price: 100, fees: 0, total_amount: 1000, historic_rate: 3.5, realized_pl: 0, created_at: "1", ...values });
 const history = (prices: DailyPrice[]): PriceHistory => ({ prices, requestedFrom: "2025-01-01", splitDates: [] });
@@ -32,11 +33,13 @@ const returns = Array.from({ length: 150 }, (_, i) => (i % 2 ? 1 : -1) * 0.01);
 test("volatility contributions reconcile to 100%, respect covariances and can be negative", () => {
   const result = calculateRiskContribution([{ ticker: "A", value: 80 }, { ticker: "HEDGE", value: 20 }], new Map([["A", riskSeries(returns)], ["HEDGE", riskSeries(returns.map(value => -value))]]), now);
   assert.equal(result.reason, null);
-  assert.ok(Math.abs(result.rows.reduce((sum, row) => sum + row.contribution, 0) - 100) < 1e-9);
-  assert.ok(result.rows[1].contribution < 0);
-  assert.ok(Math.abs(result.rows[0].contribution - 133.3333333) < 1e-5);
+  assert.ok(Math.abs(result.rows.reduce((sum, row) => sum + row.contribution!, 0) - 100) < 1e-9);
+  assert.ok(result.rows[1].contribution! < 0);
+  assert.ok(Math.abs(result.rows[0].contribution! - 133.3333333) < 1e-5);
   const expectedVolatility = Math.sqrt(150 / 149) * 0.01 * Math.sqrt(252) * 100;
   assert.ok(Math.abs(result.rows[0].annualizedVolatility - expectedVolatility) < 1e-8);
+  // 80/20 opposite returns: portfolio volatility is 60% of either fund, not their average.
+  assert.ok(Math.abs(result.annualizedPortfolioVolatility! - expectedVolatility * 0.6) < 1e-8);
   // The hedge is equally volatile on its own, despite its negative portfolio contribution.
   assert.ok(Math.abs(result.rows[0].annualizedVolatility - result.rows[1].annualizedVolatility) < 1e-8);
 });
@@ -45,7 +48,7 @@ test("a constant-price cash allocation contributes no volatility and missing/sho
   const assets = [{ ticker: "A", value: 50 }, { ticker: "CASH", value: 50 }];
   const histories = new Map([["A", riskSeries(returns)], ["CASH", riskSeries(returns.map(() => 0))]]);
   const result = calculateRiskContribution(assets, histories, now);
-  assert.ok(Math.abs(result.rows[0].contribution - 100) < 1e-8);
+  assert.ok(Math.abs(result.rows[0].contribution! - 100) < 1e-8);
   assert.equal(result.rows[1].contribution, 0);
   assert.equal(result.rows[1].annualizedVolatility, 0);
   histories.delete("CASH");
@@ -57,9 +60,45 @@ test("risk aligns full return intervals and uses adjusted prices rather than a d
   const prices = riskSeries(returns);
   const dividend = { ...prices, prices: prices.prices.map((price, index) => ({ ...price, close: price.close * (index > 70 ? 0.9 : 1) })) };
   const result = calculateRiskContribution([{ ticker: "A", value: 50 }, { ticker: "B", value: 50 }], new Map([["A", prices], ["B", dividend]]), now);
-  assert.ok(Math.abs(result.rows[0].contribution - 50) < 1e-8);
+  assert.ok(Math.abs(result.rows[0].contribution! - 50) < 1e-8);
+  assert.ok(Math.abs(result.annualizedPortfolioVolatility! - result.rows[0].annualizedVolatility) < 1e-8);
   const missing = { ...prices, prices: prices.prices.filter((_, index) => index !== 71) };
   assert.equal(calculateRiskContribution([{ ticker: "A", value: 50 }, { ticker: "B", value: 50 }], new Map([["A", prices], ["B", missing]]), now).observations, 148);
+});
+
+test("a perfectly offset portfolio keeps valid fund and portfolio volatility without inventing relative contributions", () => {
+  const result = calculateRiskContribution([{ ticker: "A", value: 50 }, { ticker: "B", value: 50 }], new Map([["A", riskSeries(returns)], ["B", riskSeries(returns.map(value => -value))]]), now);
+  assert.equal(result.reason, null);
+  assert.equal(result.observations, 150);
+  assert.ok(result.annualizedPortfolioVolatility! < 1e-10);
+  assert.ok(result.rows.every(row => row.annualizedVolatility > 15 && row.contribution === null));
+});
+
+test("uncorrelated equally weighted funds diversify by the covariance formula rather than averaging volatilities", () => {
+  const first = Array.from({ length: 148 }, (_, i) => (i % 2 ? 1 : -1) * 0.01);
+  const second = Array.from({ length: 148 }, (_, i) => (i % 4 < 2 ? 1 : -1) * 0.01);
+  const result = calculateRiskContribution([{ ticker: "A", value: 50 }, { ticker: "B", value: 50 }], new Map([["A", riskSeries(first)], ["B", riskSeries(second)]]), now);
+  const individual = Math.sqrt(148 / 147) * 0.01 * Math.sqrt(252) * 100;
+  assert.equal(result.reason, null);
+  assert.ok(Math.abs(result.annualizedPortfolioVolatility! - individual / Math.sqrt(2)) < 1e-8);
+});
+
+test("an entirely constant-price portfolio has zero volatility; absent or insufficient samples have no portfolio estimate", () => {
+  const result = calculateRiskContribution([{ ticker: "CASH", value: 100 }], new Map([["CASH", riskSeries(returns.map(() => 0))]]), now);
+  assert.equal(result.annualizedPortfolioVolatility, 0);
+  assert.equal(result.rows[0].annualizedVolatility, 0);
+  assert.equal(result.rows[0].contribution, null);
+  assert.equal(calculateRiskContribution([{ ticker: "CASH", value: 100 }], new Map(), now).annualizedPortfolioVolatility, null);
+});
+
+test("volatility display bands share exact boundaries, preserve zero and reject missing/invalid observations", () => {
+  for (const value of [0, 0.2, 4.999]) assert.equal(classifyVolatility(value)?.key, "low");
+  for (const value of [5, 10, 14.999]) assert.equal(classifyVolatility(value)?.key, "medium");
+  for (const value of [15, 20, 100]) assert.equal(classifyVolatility(value)?.key, "high");
+  for (const value of [null, undefined, NaN, Infinity, -1]) assert.equal(classifyVolatility(value), null);
+  assert.equal(formatVolatility(4.999), "<5.0%");
+  assert.equal(formatVolatility(14.999), "<15.0%");
+  assert.equal(formatVolatility(15), "15.0%");
 });
 
 test("company exposures use the whole portfolio denominator, combine share classes, and do not conflate tickers in different countries", () => {

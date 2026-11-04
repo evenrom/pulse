@@ -6,7 +6,8 @@ export type FundHolding = { symbol: string; name: string; country: string; weigh
 export type FundComposition = { holdings: FundHolding[]; asOf: string; source: string; equityWeight: number };
 export type FundProfitPoint = { date: string; usd: number | null; ils: number | null };
 export type RiskContribution = {
-  rows: { ticker: string; weight: number; contribution: number; annualizedVolatility: number }[];
+  rows: { ticker: string; weight: number; contribution: number | null; annualizedVolatility: number }[];
+  annualizedPortfolioVolatility: number | null;
   observations: number;
   from: string | null;
   through: string | null;
@@ -54,7 +55,7 @@ export function buildFundProfitHistory(ticker: string, txs: Transaction[], histo
  * Align entire return intervals, rather than filling missing prices with zero returns.
  */
 export function calculateRiskContribution(assets: { ticker: string; value: number }[], histories: Map<string, PriceHistory>, now = Date.now()): RiskContribution {
-  const empty = (reason: string, observations = 0): RiskContribution => ({ rows: [], observations, from: null, through: null, reason });
+  const empty = (reason: string, observations = 0): RiskContribution => ({ rows: [], annualizedPortfolioVolatility: null, observations, from: null, through: null, reason });
   const active = assets.filter(asset => asset.value > 0);
   const total = active.reduce((sum, asset) => sum + asset.value, 0);
   if (!active.length || total <= 0) return empty("No active holdings.");
@@ -80,14 +81,15 @@ export function calculateRiskContribution(assets: { ticker: string; value: numbe
   const mean = (values: number[]) => values.reduce((a, b) => a + b, 0) / values.length;
   const portfolioMean = mean(portfolio);
   const variance = portfolio.reduce((sum, value) => sum + (value - portfolioMean) ** 2, 0);
-  if (variance < 1e-16) return empty("Portfolio volatility is too small to allocate reliably.", intervals.length);
+  // The same weighted daily series incorporates covariances. Do not average fund volatilities.
+  const annualizedPortfolioVolatility = Math.sqrt(variance / (intervals.length - 1) * 252) * 100;
   const rows = active.map((asset, fund) => {
     const fundMean = mean(matrix[fund]);
     const fundVariance = matrix[fund].reduce((sum, value) => sum + (value - fundMean) ** 2, 0) / (intervals.length - 1);
     const covariance = portfolio.reduce((sum, value, day) => sum + (value - portfolioMean) * (matrix[fund][day] - fundMean), 0);
-    return { ticker: asset.ticker, weight: weights[fund] * 100, contribution: weights[fund] * covariance / variance * 100, annualizedVolatility: Math.sqrt(fundVariance * 252) * 100 };
+    return { ticker: asset.ticker, weight: weights[fund] * 100, contribution: variance < 1e-16 ? null : weights[fund] * covariance / variance * 100, annualizedVolatility: Math.sqrt(fundVariance * 252) * 100 };
   });
-  return { rows, observations: intervals.length, from: intervals[0].split("/")[0], through, reason: null };
+  return { rows, annualizedPortfolioVolatility, observations: intervals.length, from: intervals[0].split("/")[0], through, reason: null };
 }
 
 function companyId(holding: FundHolding) {

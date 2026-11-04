@@ -629,7 +629,7 @@ export default function Home() {
 
       {activeTab === "dashboard" && portfolioData && <>
         <FundProfitCharts data={analytics} currency={currency} period={historyFilter} loading={analyticsLoading} error={analyticsError} />
-        <RiskContributionChart data={analytics?.risk || null} returns={portfolioData.assets.filter(asset => asset.quantity > 0).map(asset => ({ ticker: asset.ticker, profitPct: asset.total_profit_pct_usd }))} loading={analyticsLoading} error={analyticsError} />
+        <RiskContributionChart data={analytics?.risk || null} returns={portfolioData.assets.filter(asset => asset.quantity > 0).map(asset => ({ ticker: asset.ticker, profitPct: asset.total_profit_pct_usd }))} totalProfitPct={portfolioData.metrics.usd.netInvested > 0 ? portfolioData.metrics.usd.netProfit / portfolioData.metrics.usd.netInvested * 100 : null} loading={analyticsLoading} error={analyticsError} />
       </>}
 
       {activeTab === "dashboard" && portfolioData?.assets && portfolioData.assets.length > 0 && (

@@ -49,7 +49,7 @@ export async function GET(request: Request) {
       return entry?.refreshed_at && composition ? [{ ticker: asset.ticker, source: composition.source, asOf: composition.asOf, refreshedAt: entry.refreshed_at, stale: Date.now() - Date.parse(entry.refreshed_at) >= HOLDINGS_REFRESH_MS }] : [];
     });
     const risk = calculateRiskContribution(values, histories);
-    if (active.some(asset => !(Number(asset.current_price) > 0))) { risk.rows = []; risk.reason = "Current prices are missing for one or more holdings."; }
+    if (active.some(asset => !(Number(asset.current_price) > 0))) { risk.rows = []; risk.annualizedPortfolioVolatility = null; risk.reason = "Current prices are missing for one or more holdings."; }
     return NextResponse.json({ funds, risk, exposure, warnings } satisfies PortfolioAnalytics, { headers });
   } catch (error) {
     console.error("Portfolio analytics error:", error);
