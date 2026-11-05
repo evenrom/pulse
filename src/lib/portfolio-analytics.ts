@@ -2,10 +2,11 @@ import { calculateAssetMetrics, calculateHoldings, type Transaction } from "./fi
 
 export type DailyPrice = { date: string; close: number; adjustedClose: number };
 export type PriceHistory = { prices: DailyPrice[]; requestedFrom: string; splitDates: string[] };
-export type FundHolding = { symbol: string; name: string; country: string; weight: number };
+export type FundHolding = { symbol: string; name: string; country: string; weight: number; sector?: string };
 export type FundComposition = {
   holdings: FundHolding[]; asOf: string; source: string; equityWeight: number;
   nonEquityWeight?: number;
+  sectorSource?: "issuer" | "ivv" | null;
   geography?: { basis: "holdings" | "fund-scope" | "unavailable"; country?: string; asOf?: string };
 };
 export type FundProfitPoint = { date: string; usd: number | null; ils: number | null };
@@ -28,8 +29,14 @@ export type PortfolioAnalytics = {
   funds: { ticker: string; points: FundProfitPoint[]; reason: string | null; through: string | null; stale: boolean }[];
   risk: RiskContribution;
   exposure: CompanyExposure;
+  sectorCompanies: SectorCompanyExposure;
   regional: import("./allocation").RegionalAllocation;
   warnings: string[];
+};
+
+export type SectorCompanyExposure = {
+  sectors: Record<string, { id: string; name: string; weight: number }[]>;
+  incompleteTickers: string[];
 };
 
 /** Same profit/cost definition as Portfolio Profit; a time filter never rebases it. */
@@ -102,6 +109,39 @@ function companyId(holding: FundHolding) {
   // Explicit issuer aliases avoid merging unrelated symbols on different national exchanges.
   const aliases: Record<string, string> = { GOOG: "ALPHABET", GOOGL: "ALPHABET", BRKA: "BERKSHIRE", BRKB: "BERKSHIRE", FOX: "FOX", FOXA: "FOX", NWS: "NEWS", NWSA: "NEWS" };
   return `${holding.country.toUpperCase()}:${aliases[symbol] || symbol}`;
+}
+
+export function aggregateSectorCompanies(
+  assets: { ticker: string; value: number }[],
+  compositions: Map<string, FundComposition>,
+): SectorCompanyExposure {
+  const total = assets.reduce((sum, asset) => sum + Math.max(0, asset.value), 0);
+  const groups = new Map<string, Map<string, SectorCompanyExposure["sectors"][string][number]>>();
+  const incompleteTickers: string[] = [];
+  for (const { ticker, value } of assets) {
+    if (!(value > 0) || ticker === "SGOV" || ticker === "IAU") continue;
+    const holdings = compositions.get(ticker)?.holdings ?? [];
+    if (!holdings.length || holdings.some(holding => holding.weight > 0 && !holding.sector)) {
+      incompleteTickers.push(ticker);
+    }
+    for (const holding of holdings) {
+      if (!holding.sector || !(holding.weight > 0)) continue;
+      let companies = groups.get(holding.sector);
+      if (!companies) {
+        companies = new Map();
+        groups.set(holding.sector, companies);
+      }
+      const id = companyId(holding);
+      const company = companies.get(id) ?? { id, name: holding.name, weight: 0 };
+      company.weight += value / total * holding.weight * 100;
+      companies.set(id, company);
+    }
+  }
+  const sectors = Object.fromEntries(Array.from(groups, ([sector, companies]) => [
+    sector,
+    Array.from(companies.values()).sort((a, b) => b.weight - a.weight || a.name.localeCompare(b.name)).slice(0, 5),
+  ]));
+  return { sectors, incompleteTickers };
 }
 
 export function aggregateCompanyExposure(assets: { ticker: string; value: number }[], compositions: Map<string, FundComposition>): CompanyExposure {

@@ -45,7 +45,7 @@ test("fresh legacy holdings upgrade immediately once, preserving payload and bac
   await refreshAnalyticsCache(db, ["VOO"], "2025-01-01", offline, now + 2000);
   assert.equal(attempts, 1);
   assert.deepEqual((await readAnalyticsCache(db)).get("holdings:v1:VOO")!.payload, legacy);
-  const upgraded = { ...legacy, geography: { basis: "fund-scope" as const, country: "United States" } };
+  const upgraded = { ...legacy, sectorSource: "ivv" as const, geography: { basis: "fund-scope" as const, country: "United States" } };
   const providers = { prices: async () => prices, holdings: async () => { attempts++; return upgraded; } };
   await refreshAnalyticsCache(db, ["VOO"], "2025-01-01", providers, now + 3601001);
   await refreshAnalyticsCache(db, ["VOO"], "2025-01-01", providers, now + 3601002);
@@ -84,7 +84,7 @@ test("fresh iShares caches upgrade once to include non-equity weights, with fail
   await refreshAnalyticsCache(db, ["IDEV"], "2025-01-01", fail, now + 2000);
   assert.equal(attempts, 1);
   assert.deepEqual((await readAnalyticsCache(db)).get("holdings:v1:IDEV")!.payload, legacy);
-  const upgraded = { ...legacy, nonEquityWeight: 0.0061 };
+  const upgraded = { ...legacy, sectorSource: "issuer" as const, nonEquityWeight: 0.0061 };
   const success = { prices: async () => prices, holdings: async () => { attempts++; return upgraded; } };
   await refreshAnalyticsCache(db, ["IDEV"], "2025-01-01", success, now + 3601001);
   await refreshAnalyticsCache(db, ["IDEV"], "2025-01-01", success, now + 3601002);

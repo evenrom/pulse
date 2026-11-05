@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { aggregateCompanyExposure, buildFundProfitHistory, calculateRiskContribution, type DailyPrice, type FundComposition, type PriceHistory } from "./portfolio-analytics";
+import { aggregateCompanyExposure, aggregateSectorCompanies, buildFundProfitHistory, calculateRiskContribution, type DailyPrice, type FundComposition, type PriceHistory } from "./portfolio-analytics";
 import { parseIsharesHoldings, parseVanguardHoldings, parseYahooHistory } from "./analytics-providers";
 import type { Transaction } from "./finance";
 import { classifyVolatility, formatVolatility } from "./volatility";
@@ -111,6 +111,28 @@ test("company exposures use the whole portfolio denominator, combine share class
   assert.equal(result.coveredPortfolioPct, 10);
   assert.equal(result.equityPortfolioPct, 30);
   assert.deepEqual(aggregateCompanyExposure([{ ticker: "MISSING", value: 100 }], new Map()).missingTickers, ["MISSING"]);
+});
+
+test("sector rankings merge fund exposure and share classes before taking the top five in each sector", () => {
+  const holdings = (rows: [string, string | undefined, number][]): FundComposition => ({
+    asOf: "2026-01-01", source: "test", equityWeight: 1,
+    holdings: rows.map(([symbol, sector, weight]) => ({ symbol, name: symbol, sector, weight, country: "United States" })),
+  });
+  const result = aggregateSectorCompanies([
+    { ticker: "VOO", value: 40 }, { ticker: "USMV", value: 10 }, { ticker: "SGOV", value: 45 }, { ticker: "IAU", value: 5 },
+  ], new Map([
+    ["VOO", holdings([
+      ["GOOG", "Communications", 0.03], ["GOOGL", "Communications", 0.02],
+      ["NVDA", "Technology", 0.1], ["UNMAPPED", undefined, 0.05],
+      ...Array.from({ length: 6 }, (_, index): [string, string, number] => [`T${index}`, "Technology", (index + 1) / 100]),
+    ])],
+    ["USMV", holdings([["NVDA", "Technology", 0.02]])],
+  ]));
+  assert.deepEqual(result.sectors.Technology.map(row => row.name), ["NVDA", "T5", "T4", "T3", "T2"]);
+  assert.ok(Math.abs(result.sectors.Technology[0].weight - 4.2) < 1e-9);
+  assert.equal(result.sectors.Communications.length, 1);
+  assert.ok(Math.abs(result.sectors.Communications[0].weight - 2) < 1e-9);
+  assert.deepEqual(result.incompleteTickers, ["VOO"]);
 });
 
 test("issuer parsers handle CSV preambles/quotes and reject incomplete holdings rather than normalizing top-ten data", () => {

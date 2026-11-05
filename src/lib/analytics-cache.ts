@@ -42,10 +42,15 @@ export async function refreshAnalyticsCache(
     const needsEarlierHistory = job.kind === "prices" && (entry?.payload as PriceHistory | null)?.requestedFrom && (entry!.payload as PriceHistory).requestedFrom > from;
     const oldComposition = job.kind === "holdings" ? entry?.payload as FundComposition | undefined : undefined;
     const oldGeography = oldComposition?.geography;
-    const missingCountryMetadata = Boolean(oldComposition) && (!oldGeography || (oldComposition?.source === "iShares" && oldComposition.nonEquityWeight === undefined));
-    const needsCountryMetadata = missingCountryMetadata || oldGeography?.basis === "unavailable";
-    if (!needsEarlierHistory && !needsCountryMetadata && entry?.payload && now - Date.parse(entry.refreshed_at || "") < interval) return { key: job.key, error: null };
-    const upgradeSuccessfulLegacy = missingCountryMetadata && entry?.last_attempt_at === entry?.refreshed_at;
+    const tracksSectors = oldComposition?.source === "iShares" || oldComposition?.source === "Vanguard";
+    const missingCompositionMetadata = Boolean(oldComposition) && (
+      !oldGeography || (oldComposition?.source === "iShares" && oldComposition.nonEquityWeight === undefined)
+      || (tracksSectors && oldComposition?.sectorSource === undefined)
+    );
+    const needsCompositionRefresh = missingCompositionMetadata || oldGeography?.basis === "unavailable"
+      || (tracksSectors && oldComposition?.sectorSource === null);
+    if (!needsEarlierHistory && !needsCompositionRefresh && entry?.payload && now - Date.parse(entry.refreshed_at || "") < interval) return { key: job.key, error: null };
+    const upgradeSuccessfulLegacy = missingCompositionMetadata && entry?.last_attempt_at === entry?.refreshed_at;
     if (!upgradeSuccessfulLegacy && entry && now - Date.parse(entry.last_attempt_at) < RETRY_MS) return { key: job.key, error: entry.payload ? null : "Provider retry scheduled" };
     try {
       const payload: PriceHistory | FundComposition = job.kind === "prices" ? await providers.prices(job.ticker, from) : await providers.holdings(job.ticker);

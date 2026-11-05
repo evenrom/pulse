@@ -4,7 +4,7 @@ import { assets, transactions } from "@/db/schema";
 import { validatePin } from "@/lib/auth";
 import { calculateHoldings } from "@/lib/finance";
 import { analyticsStartDate, HOLDINGS_REFRESH_MS, readAnalyticsCache, refreshAnalyticsCache } from "@/lib/analytics-cache";
-import { aggregateCompanyExposure, buildFundProfitHistory, calculateRiskContribution, type FundComposition, type PortfolioAnalytics, type PriceHistory } from "@/lib/portfolio-analytics";
+import { aggregateCompanyExposure, aggregateSectorCompanies, buildFundProfitHistory, calculateRiskContribution, type FundComposition, type PortfolioAnalytics, type PriceHistory } from "@/lib/portfolio-analytics";
 import { aggregateRegionalAllocation } from "@/lib/allocation";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +44,7 @@ export async function GET(request: Request) {
     });
     const values = active.map(asset => ({ ticker: asset.ticker, value: (quantities[asset.ticker] || 0) * (asset.current_price || 0) }));
     const exposure = aggregateCompanyExposure(values, compositions);
+    const sectorCompanies = aggregateSectorCompanies(values, compositions);
     exposure.sources = active.flatMap(asset => {
       const entry = cache.get(`holdings:v1:${asset.ticker}`);
       const composition = compositions.get(asset.ticker);
@@ -53,7 +54,7 @@ export async function GET(request: Request) {
     const regional = aggregateRegionalAllocation(values, compositions);
     regional.sources = exposure.sources.map(source => ({ ...source, basis: compositions.get(source.ticker)?.geography?.basis || (source.source === "iShares" ? "holdings" : "unavailable") }));
     if (active.some(asset => !(Number(asset.current_price) > 0))) { risk.rows = []; risk.annualizedPortfolioVolatility = null; risk.reason = "Current prices are missing for one or more holdings."; }
-    return NextResponse.json({ funds, risk, exposure, regional, warnings } satisfies PortfolioAnalytics, { headers });
+    return NextResponse.json({ funds, risk, exposure, sectorCompanies, regional, warnings } satisfies PortfolioAnalytics, { headers });
   } catch (error) {
     console.error("Portfolio analytics error:", error);
     return NextResponse.json({ error: "Analytics are temporarily unavailable. Your portfolio is still available." }, { status: 503, headers });

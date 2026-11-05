@@ -557,7 +557,12 @@ export default function Home() {
 
       {activeTab === "dashboard" && portfolioData?.assets && portfolioData.assets.length > 0 && (
         <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <SectorEngineAllocation assets={portfolioData.assets} failedTickers={syncResult?.sectorRefresh?.failedTickers.map(item => item.ticker)} />
+          <SectorEngineAllocation
+            assets={portfolioData.assets}
+            companies={analytics?.sectorCompanies}
+            loading={analyticsLoading}
+            failedTickers={syncResult?.sectorRefresh?.failedTickers.map(item => item.ticker)}
+          />
           <RegionalAllocation data={analytics?.regional || null} loading={analyticsLoading} error={analyticsError} />
         </div>
       )}

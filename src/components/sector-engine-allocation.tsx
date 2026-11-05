@@ -2,17 +2,25 @@
 
 import { useMemo, useState } from "react";
 import { buildSectorAllocation } from "@/lib/allocation";
+import type { SectorCompanyExposure } from "@/lib/portfolio-analytics";
 import type { SectorAllocation } from "@/lib/sector-allocation";
 
 type Asset = { ticker: string; quantity: number; value_usd: number; sector_allocation: SectorAllocation };
 const SOURCE_LABELS = { yahoo: "Yahoo Finance", custom: "Custom asset classification", fallback: "Configured fallback", unclassified: "Unclassified" };
 
-export function SectorEngineAllocation({ assets, failedTickers = [] }: { assets: Asset[]; failedTickers?: string[] }) {
+export function SectorEngineAllocation({ assets, companies, loading, failedTickers = [] }: {
+  assets: Asset[];
+  companies?: SectorCompanyExposure;
+  loading: boolean;
+  failedTickers?: string[];
+}) {
   const [selectedName, setSelectedName] = useState("Technology");
   const active = assets.filter(asset => asset.quantity > 0);
   const engines = useMemo(() => buildSectorAllocation(assets.filter(asset => asset.quantity > 0).map(asset => ({ ticker: asset.ticker, value: asset.value_usd, weights: asset.sector_allocation?.weights || { Other: 1 } }))), [assets]);
   const sectors = engines.flatMap(engine => engine.sectors);
   const selected = sectors.find(sector => sector.name === selectedName) || sectors[0];
+  const topCompanies = selected ? companies?.sectors[selected.name] ?? [] : [];
+  const nonEquity = selected && ["Gold", "T-Bills", "Cash & Equivalents"].includes(selected.name);
   const maximum = Math.max(10, Math.ceil(Math.max(0, ...engines.map(engine => engine.pct)) / 10) * 10);
   const fallback = active.filter(asset => !asset.sector_allocation || ["fallback", "unclassified"].includes(asset.sector_allocation.source));
   const stale = active.filter(asset => asset.sector_allocation?.isStale);
@@ -27,20 +35,36 @@ export function SectorEngineAllocation({ assets, failedTickers = [] }: { assets:
         <div className="space-y-5">{engines.map(engine => <div key={engine.name}>
           <div className="mb-2 flex items-center justify-between gap-3 text-sm"><span className="font-semibold text-slate-100">{engine.name}</span><span className="font-semibold tabular-nums text-white">{engine.pct.toFixed(1)}%</span></div>
           <div className="h-5 overflow-hidden rounded bg-slate-800/70">
-            <div className="flex h-full" style={{ width: `${engine.pct / maximum * 100}%` }}>{engine.sectors.map(sector => <button key={sector.name} type="button" aria-pressed={selected?.name === sector.name} aria-label={`${sector.name}: ${sector.pct.toFixed(2)}% of portfolio; show fund contributions`} title={`${sector.name} · ${sector.pct.toFixed(2)}% of portfolio`} onClick={() => setSelectedName(sector.name)} onFocus={() => setSelectedName(sector.name)} className="h-full min-w-0 border-y-2 transition-opacity hover:brightness-125" style={{ width: `${sector.pct / engine.pct * 100}%`, backgroundColor: sector.color, opacity: sector.opacity, borderColor: selected?.name === sector.name ? "white" : "transparent" }} />)}</div>
+            <div className="flex h-full" style={{ width: `${engine.pct / maximum * 100}%` }}>{engine.sectors.map(sector => <button key={sector.name} type="button" aria-pressed={selected?.name === sector.name} aria-label={`${sector.name}: ${sector.pct.toFixed(2)}% of portfolio; show top stocks`} title={`${sector.name} · ${sector.pct.toFixed(2)}% of portfolio`} onClick={() => setSelectedName(sector.name)} onFocus={() => setSelectedName(sector.name)} className="h-full min-w-0 border-y-2 transition-opacity hover:brightness-125" style={{ width: `${sector.pct / engine.pct * 100}%`, backgroundColor: sector.color, opacity: sector.opacity, borderColor: selected?.name === sector.name ? "white" : "transparent" }} />)}</div>
           </div>
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">{engine.sectors.map(sector => <button key={sector.name} type="button" onClick={() => setSelectedName(sector.name)} aria-pressed={selected?.name === sector.name} className={`text-left text-[11px] leading-relaxed ${selected?.name === sector.name ? "text-white underline decoration-slate-500 underline-offset-2" : "text-slate-400 hover:text-slate-200"}`}>{sector.name} {sector.pct.toFixed(1)}%</button>)}</div>
         </div>)}</div>
         {selected && <div className="mt-5 rounded-xl border border-slate-700 bg-slate-950/30 px-4 py-3" role="status" aria-live="polite">
           <p className="text-sm font-semibold text-white">{selected.name} · {selected.pct.toFixed(1)}% of portfolio</p>
-          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-300">{selected.contributions.map(item => <span key={item.ticker} className="inline-flex items-center gap-2"><span className="h-2 w-2 rounded-sm" style={{ backgroundColor: selected.color }} />{item.ticker} <span className="tabular-nums">{item.pct.toFixed(2)}%</span></span>)}</div>
+          {topCompanies.length > 0 ? <>
+            <div className="mt-2 flex justify-between gap-2 text-[11px] text-slate-400">
+              <span>Top stocks</span><span>% of portfolio</span>
+            </div>
+            <ol className="mt-1 divide-y divide-slate-800 text-xs text-slate-200">
+              {topCompanies.map(company => <li key={company.id} className="flex items-center justify-between gap-3 py-1.5">
+                <span className="min-w-0 break-words">{company.name}</span>
+                <span className="shrink-0 tabular-nums">{company.weight < 0.005 ? "<0.01%" : `${company.weight.toFixed(2)}%`}</span>
+              </li>)}
+            </ol>
+          </> : <p className="mt-2 text-xs text-slate-400">{nonEquity
+            ? "This allocation contains no stocks."
+            : loading ? "Loading stocks…" : "No classified stocks available for this sector."}</p>}
+          {!nonEquity && !!companies?.incompleteTickers.length && (
+            <p className="mt-2 text-[11px] text-slate-400">Some sector data are missing for {companies.incompleteTickers.join(", ")}.</p>
+          )}
         </div>}
       </>}
     </div>
     <details className="mt-auto border-t border-slate-800 px-5 py-3 text-xs leading-relaxed text-slate-400 sm:px-6">
       <summary className="cursor-pointer">Data sources &amp; methodology</summary>
       <div className="mt-3 space-y-3">
-        <p>All engine totals, sector percentages and ETF contributions use the entire portfolio as denominator, including SGOV and IAU. Bars use a shared scale; their colors remain attached to their engine and sector rather than their rank. Select a segment or a sector name to inspect its ETF contributions.</p>
+        <p>Engine, sector and stock percentages are shares of the entire portfolio, including SGOV and IAU. Select a sector to see up to five companies ranked by combined exposure across your funds.</p>
+        <p>Stock weights come from issuer holdings. iShares supplies sector labels in its holdings files. For VOO, sector labels are matched to IVV holdings by ticker. Stock weights for VOO come from Vanguard. Sector totals and stock rankings can reflect different reporting dates and sources.</p>
         <p>SGOV is shown as T-Bills and IAU as Gold. Other funds’ cash residuals remain Cash &amp; Equivalents under Other; they are not labeled as Treasury bills. These are composition categories, not risk or safety ratings.</p>
         {fallback.length > 0 && <p className="text-amber-400">Configured fallbacks: {fallback.map(asset => asset.ticker).join(", ")}. Live sector weights are unavailable for these funds.</p>}
         {stale.length > 0 && <p className="text-amber-400">Refresh overdue: {stale.map(asset => asset.ticker).join(", ")}. Last valid weights retained.</p>}

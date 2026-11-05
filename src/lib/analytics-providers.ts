@@ -1,6 +1,20 @@
 import type { DailyPrice, FundComposition, FundHolding, PriceHistory } from "./portfolio-analytics";
 
 const HEADERS = { "User-Agent": "Mozilla/5.0", Accept: "application/json,text/csv,text/html" };
+const HOLDING_SECTORS = new Map([
+  ["Information Technology", "Technology"],
+  ["Financials", "Financials"],
+  ["Health Care", "Healthcare"],
+  ["Consumer Discretionary", "Consumer Cyclical"],
+  ["Communication", "Communications"],
+  ["Communication Services", "Communications"],
+  ["Industrials", "Industrials"],
+  ["Consumer Staples", "Consumer Defensive"],
+  ["Energy", "Energy"],
+  ["Real Estate", "Real Estate"],
+  ["Materials", "Basic Materials"],
+  ["Utilities", "Utilities"],
+]);
 async function get(url: string) {
   const response = await fetch(url, { headers: HEADERS, cache: "no-store", signal: AbortSignal.timeout(12000) });
   if (!response.ok) throw new Error(`Data provider returned ${response.status}`);
@@ -84,6 +98,7 @@ export function parseIsharesHoldings(text: string): FundComposition {
   const field = (row: string[], name: string) => row[header.indexOf(name)] || "";
   const holdings = rows.slice(headerIndex + 1).filter(row => field(row, "Asset Class") === "Equity").map(row => ({
     symbol: field(row, "Ticker"), name: field(row, "Name"), country: field(row, "Location"), weight: Number(field(row, "Weight (%)").replace(/,/g, "")) / 100,
+    sector: HOLDING_SECTORS.get(field(row, "Sector")),
   }));
   const composition = validateComposition(holdings, asOf, "iShares");
   const nonEquityWeights = rows.slice(headerIndex + 1)
@@ -92,7 +107,33 @@ export function parseIsharesHoldings(text: string): FundComposition {
   if (nonEquityWeights.some(weight => !Number.isFinite(weight))) throw new Error("Invalid non-equity weights; keeping the last valid composition");
   // Keep the same rounding divisor as the equity holdings. Never call the entire residual cash.
   const divisor = Math.max(1, holdings.reduce((sum, holding) => sum + holding.weight, 0));
-  return { ...composition, nonEquityWeight: Math.max(0, nonEquityWeights.reduce((sum, weight) => sum + weight, 0)) / divisor, geography: { basis: "holdings", asOf } };
+  return { ...composition, nonEquityWeight: Math.max(0, nonEquityWeights.reduce((sum, weight) => sum + weight, 0)) / divisor, geography: { basis: "holdings", asOf }, sectorSource: holdings.some(holding => holding.sector) ? "issuer" : null };
+}
+
+function sectorSymbol(symbol: string) {
+  return symbol.trim().toUpperCase().replace(/[ ./-]+/g, ".");
+}
+
+/** IVV supplies sector labels for the shared index securities. VOO weights always come from Vanguard. */
+export function classifyVanguardHoldings(composition: FundComposition, csv: string): FundComposition {
+  const rows = parseCsv(csv);
+  const headerIndex = rows.findIndex(row => row.includes("Ticker") && row.includes("Sector") && row.includes("Asset Class"));
+  if (headerIndex < 0) throw new Error("Missing IVV sector columns");
+  const header = rows[headerIndex];
+  const tickerIndex = header.indexOf("Ticker");
+  const sectorIndex = header.indexOf("Sector");
+  const assetClassIndex = header.indexOf("Asset Class");
+  const sectors = new Map<string, string | undefined>();
+  for (const row of rows.slice(headerIndex + 1)) {
+    if (row[assetClassIndex] !== "Equity" || !row[tickerIndex]) continue;
+    const symbol = sectorSymbol(row[tickerIndex]);
+    const sector = HOLDING_SECTORS.get(row[sectorIndex]);
+    if (sectors.has(symbol) && sectors.get(symbol) !== sector) sectors.set(symbol, undefined);
+    else sectors.set(symbol, sector);
+  }
+  if (sectors.size < 400) throw new Error("Incomplete IVV sector data");
+  const holdings = composition.holdings.map(holding => ({ ...holding, sector: sectors.get(sectorSymbol(holding.symbol)) }));
+  return { ...composition, holdings, sectorSource: holdings.some(holding => holding.sector) ? "ivv" : null };
 }
 
 export function parseVanguardHoldings(payload: unknown): FundComposition {
@@ -122,11 +163,17 @@ const ISHARES: Record<string, string> = {
 
 export async function fetchFundComposition(ticker: string): Promise<FundComposition> {
   if (ticker === "VOO") {
-    const [payload, scope] = await Promise.all([
+    const [payload, scope, sectorCsv] = await Promise.all([
       get("https://investor.vanguard.com/irr/funds/profile/VOO-AdditionalFundData").then(response => response.json()),
       get("https://investor.vanguard.com/investment-products/etfs/profile/voo").then(response => response.text()).then(parseVanguardGeography).catch(() => ({ basis: "unavailable" as const })),
+      get("https://www.ishares.com/us/products/239726/ishares-core-sp-500-etf/latest-holdings.csv").then(response => response.text()).catch(() => null),
     ]);
-    return { ...parseVanguardHoldings(payload), geography: scope };
+    const composition: FundComposition = { ...parseVanguardHoldings(payload), geography: scope, sectorSource: null };
+    if (sectorCsv) {
+      try { return classifyVanguardHoldings(composition, sectorCsv); }
+      catch { /* Holdings remain usable if the sector feed fails. */ }
+    }
+    return composition;
   }
   if (!ISHARES[ticker]) throw new Error(`Full holdings are not configured for ${ticker}`);
   return parseIsharesHoldings(await (await get(`https://www.ishares.com/us/products/${ISHARES[ticker]}/latest-holdings.csv`)).text());
