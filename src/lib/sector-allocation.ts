@@ -5,7 +5,8 @@ const RETRY_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 export type SectorAllocation = {
   weights: Record<string, number>;
-  source: "yahoo" | "custom" | "fallback" | "unclassified";
+  source: "yahoo" | "franklin" | "custom" | "fallback" | "unclassified";
+  asOf?: string;
   lastRefreshed: string | null;
   isStale: boolean;
 };

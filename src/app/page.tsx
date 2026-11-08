@@ -125,6 +125,9 @@ export default function Home() {
   const [currency, setCurrency] = useState<"usd" | "ils">("usd");
   const [portfolioData, setPortfolioData] = useState<PortfolioData | null>(null);
   const [activeTab, setActiveTab] = useState<"dashboard" | "holdings" | "simulate" | "history" | "trade">("dashboard");
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, [activeTab]);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   const [tradeDate, setTradeDate] = useState(new Date().toISOString().split("T")[0]);
@@ -558,7 +561,9 @@ export default function Home() {
       {activeTab === "dashboard" && portfolioData?.assets && portfolioData.assets.length > 0 && (
         <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
           <SectorEngineAllocation
-            assets={portfolioData.assets}
+            assets={portfolioData.assets.map(asset => asset.ticker === "FLAX" && analytics?.flaxSectorAllocation
+              ? { ...asset, sector_allocation: analytics.flaxSectorAllocation }
+              : asset)}
             companies={analytics?.sectorCompanies}
             loading={analyticsLoading}
             failedTickers={syncResult?.sectorRefresh?.failedTickers.map(item => item.ticker)}

@@ -1,10 +1,39 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { aggregateRegionalAllocation, buildSectorAllocation, hasMaterialCountryGap } from "./allocation";
-import { parseIsharesHoldings, parseVanguardGeography } from "./analytics-providers";
+import { parseFranklinComposition, parseIsharesHoldings, parseVanguardGeography } from "./analytics-providers";
 import type { FundComposition } from "./portfolio-analytics";
 
 const close = (actual: number, expected: number) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} ≠ ${expected}`);
+
+test("FLAX uses issuer country and sector tables independently of stock-level labels", () => {
+  const allocation = (name: string, weight: number) => ({
+    brkdwnname: name, sectorname: name, brkdwnpctstd: String(weight),
+    calcnamestd: "TOTAL_PCT_OF_TOTAL", asofdate: "11/05/2026",
+  });
+  const dailyholdings = Array.from({ length: 20 }, (_, index) => ({
+    asofdate: "11/06/2026", secticker: String(index), secname: `Company ${index}`,
+    assetclasscatg: "FOREIGN STOCK", pctofnetassetsstd: "4.99", sctrname: "—",
+  }));
+  dailyholdings.push({ ...dailyholdings[0], secticker: "—", secname: "TAX", pctofnetassetsstd: "0.0" });
+  const payload = { data: { Portfolio: { fundname: "Franklin FTSE Asia ex Japan ETF", portfolio: {
+    dailyholdings,
+    countryallocation: [allocation("Taiwan", 40), allocation("China", 25), allocation("South Korea", 20), allocation("India", 14), allocation("Macao", 0.8), allocation("Cash & Cash Equivalents", 0.2)],
+    sectorallocation: [allocation("Information Technology", 40), allocation("Financials", 25), allocation("Industrials", 20), allocation("Materials", 14), allocation("Utilities", 0.8), allocation("Cash & Cash Equivalents", 0.2)],
+  } } } };
+  const fund = parseFranklinComposition(payload);
+  assert.equal(fund.holdings.length, 20);
+  assert.equal(fund.holdings[0].sector, undefined);
+  close(fund.sectorAllocation!.weights.Technology, 0.4);
+  const region = aggregateRegionalAllocation([{ ticker: "FLAX", value: 5 }, { ticker: "SGOV", value: 40 }], new Map([["FLAX", fund]]));
+  assert.deepEqual(region.missingTickers, []);
+  assert.equal(region.regions[0].name, "Asia & Pacific");
+  assert.equal(region.regions[0].countries.find(row => row.name === "Macau")?.contributions[0].ticker, "FLAX");
+  close(region.residuals.nonEquity[0].pct, 0.2);
+  payload.data.Portfolio.portfolio.countryallocation.pop();
+  payload.data.Portfolio.portfolio.countryallocation.pop();
+  assert.throws(() => parseFranklinComposition(payload), /Incomplete Franklin Templeton country allocation/);
+});
 const composition = (countries: [string, number][], extra: Partial<FundComposition> = {}): FundComposition => ({
   source: "iShares", asOf: "2026-01-01", equityWeight: countries.reduce((sum, [, weight]) => sum + weight, 0),
   holdings: countries.map(([country, weight], index) => ({ symbol: `S${index}`, name: `Company ${index}`, country, weight })),

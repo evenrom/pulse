@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { assets, transactions, snapshots } from "@/db/schema";
+import { transactions, snapshots } from "@/db/schema";
+import { loadPortfolioAssets } from "@/lib/portfolio-plan";
 import { asc } from "drizzle-orm";
 import { validatePin } from "@/lib/auth";
 import { resolveSectorAllocation } from "@/lib/sector-allocation";
@@ -23,7 +24,7 @@ export async function GET(request: Request) {
     }
 
     // 2. Fetch data from Turso
-    const allAssets = await db.select().from(assets);
+    const allAssets = await loadPortfolioAssets(db);
     const allTransactions = await db.select().from(transactions);
     const allSnapshots = await db.select().from(snapshots).orderBy(asc(snapshots.date));
     const sectorAllocationCache = await readSectorAllocationCache(db).catch(error => {

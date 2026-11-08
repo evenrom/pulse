@@ -3,6 +3,8 @@ import { db } from "@/db";
 import { assets, transactions } from "@/db/schema";
 import { validatePin } from "@/lib/auth";
 import { calculateFifo } from "@/lib/fifo";
+import { loadPortfolioAssets } from "@/lib/portfolio-plan";
+import { and, eq, isNull, lte, or } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -80,7 +82,7 @@ export async function POST(request: Request) {
       validated.push(result);
     }
 
-    const allAssets = await db.select({ ticker: assets.ticker }).from(assets);
+    const allAssets = await loadPortfolioAssets(db);
     const knownTickers = new Set(allAssets.map(asset => asset.ticker));
     const unknown = validated.find(trade => !knownTickers.has(trade.ticker));
     if (unknown) return NextResponse.json({ error: `Unknown ticker ${unknown.ticker}.` }, { status: 400, headers: noStoreHeaders });
@@ -111,8 +113,21 @@ export async function POST(request: Request) {
     const realizedById = new Map(fifo.sales.map(sale => [sale.transactionId, sale.realizedProfit]));
     const values = pending.map(tx => ({ ...tx, realized_pl: realizedById.get(tx.id) || 0 }));
 
-    // One bulk statement keeps the batch all-or-nothing.
-    await db.insert(transactions).values(values);
+    const newFlaxBuy = allAssets.some(asset => asset.ticker === "FLAX" && !(Number(asset.current_price) > 0))
+      ? validated.filter(trade => trade.ticker === "FLAX" && trade.action === "BUY").sort((a, b) => b.date.localeCompare(a.date))[0]
+      : undefined;
+    if (newFlaxBuy) {
+      // Value the first recorded position even if market sync has not priced FLAX yet.
+      await db.batch([
+        db.insert(transactions).values(values),
+        db.update(assets).set({ current_price: newFlaxBuy.price }).where(and(
+          eq(assets.ticker, "FLAX"),
+          or(isNull(assets.current_price), lte(assets.current_price, 0)),
+        )),
+      ]);
+    } else {
+      await db.insert(transactions).values(values);
+    }
 
     return NextResponse.json({
       success: true,

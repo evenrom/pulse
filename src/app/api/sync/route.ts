@@ -10,6 +10,7 @@ import { validatePin } from '@/lib/auth';
 import { refreshSectorAllocationCache } from '@/lib/sector-allocation-cache';
 import { CUSTOM_SECTOR_BREAKDOWN } from '@/lib/config';
 import { analyticsStartDate, refreshAnalyticsCache } from '@/lib/analytics-cache';
+import { loadPortfolioAssets } from '@/lib/portfolio-plan';
 
 async function runSync() {
   // Fetch transactions and calculate holdings early
@@ -17,7 +18,7 @@ async function runSync() {
   const holdings = calculateHoldings(allTxs);
 
   // 1. Fetch all assets
-  const allAssets = await db.select().from(assets);
+  const allAssets = await loadPortfolioAssets(db);
   if (!allAssets || allAssets.length === 0) {
     return {
       success: true,
@@ -36,9 +37,11 @@ async function runSync() {
     .map(asset => asset.ticker);
   const analyticsRefreshPromise = refreshAnalyticsCache(db, activeTickers, analyticsStartDate(allTxs.map(tx => tx.date))).catch(() => []);
   // Run independently of price updates; sector failures must not block prices or snapshots.
-  const sectorRefreshPromise = refreshSectorAllocationCache(db, activeTickers).catch(() => ({
+  // FLAX sector weights arrive with its Franklin Templeton composition.
+  const sectorTickers = activeTickers.filter(ticker => ticker !== "FLAX");
+  const sectorRefreshPromise = refreshSectorAllocationCache(db, sectorTickers).catch(() => ({
     updatedTickers: [] as string[],
-    failedTickers: activeTickers
+    failedTickers: sectorTickers
       .filter(ticker => !CUSTOM_SECTOR_BREAKDOWN[ticker])
       .map(ticker => ({ ticker, error: 'Sector allocation cache unavailable' })),
   }));

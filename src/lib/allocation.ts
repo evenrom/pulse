@@ -66,7 +66,7 @@ const COUNTRY_GROUPS: Record<string, string[]> = {
 };
 const COUNTRY_TO_REGION = new Map(Object.entries(COUNTRY_GROUPS).flatMap(([region, countries]) => countries.map(country => [country, region] as const)));
 const COUNTRY_ALIASES: Record<string, string> = { US: "United States", USA: "United States", "United States of America": "United States", UK: "United Kingdom", "Great Britain": "United Kingdom", "Korea (South)": "South Korea", "Korea, Republic of": "South Korea", "Republic of Korea": "South Korea", "Czechia": "Czech Republic", "Russian Federation": "Russia", "Hong Kong SAR": "Hong Kong" };
-export function normalizeCountry(value: string) { const name = value.trim(); return COUNTRY_ALIASES[name] || name; }
+export function normalizeCountry(value: string) { const name = value.trim(); return name === "Macao" ? "Macau" : COUNTRY_ALIASES[name] || name; }
 
 /** A whole missing fund or at least 1% missing/unmapped equity-fund value merits a visible notice. */
 export function hasMaterialCountryGap(data: RegionalAllocation) {
@@ -120,7 +120,13 @@ export function aggregateRegionalAllocation(assets: { ticker: string; value: num
         add(holding.country, fundPct * weight, asset.ticker);
         allocated += weight;
       }
-    } else if (composition && basis === "fund-scope" && composition.geography?.country) {
+    } else if (composition?.geography?.basis === "issuer-allocation") {
+      for (const { country, weight } of composition.geography.countries) {
+        const cappedWeight = Math.min(weight, Math.max(0, 1 - allocated));
+        add(country, fundPct * cappedWeight, asset.ticker);
+        allocated += cappedWeight;
+      }
+    } else if (composition?.geography?.basis === "fund-scope" && composition.geography.country) {
       allocated = Math.max(0, Math.min(1, composition.equityWeight));
       add(composition.geography.country, fundPct * allocated, asset.ticker);
       result.fundScopeTickers.push(asset.ticker);
@@ -130,7 +136,9 @@ export function aggregateRegionalAllocation(assets: { ticker: string; value: num
       continue;
     }
     const residual = Math.max(0, 1 - allocated);
-    const reportedNonEquity = composition?.nonEquityWeight;
+    const reportedNonEquity = composition?.geography?.basis === "issuer-allocation"
+      ? composition.geography.cashWeight
+      : composition?.nonEquityWeight;
     const nonEquity = typeof reportedNonEquity === "number" && Number.isFinite(reportedNonEquity) ? Math.min(residual, Math.max(0, reportedNonEquity)) : 0;
     remainder("nonEquity", fundPct * nonEquity, asset.ticker);
     remainder("reportingGap", fundPct * Math.max(0, residual - nonEquity), asset.ticker);

@@ -156,12 +156,110 @@ export function parseVanguardGeography(html: string): NonNullable<FundCompositio
   } catch { return { basis: "unavailable" }; }
 }
 
+type FranklinHolding = {
+  asofdate: string; secticker: string; isinsecnbr: string; secname: string;
+  sctrname: string; pctofnetassetsstd: string; assetclasscatg: string;
+};
+type FranklinAllocation = {
+  asofdate: string; brkdwnpctstd: string; calcnamestd: string;
+  brkdwnname?: string; sectorname?: string; parent?: string; parentsectorname?: string;
+};
+const FRANKLIN_CASH = "Cash & Cash Equivalents";
+
+function franklinMix(rows: FranklinAllocation[] | undefined, kind: "country" | "sector") {
+  const totals = rows?.filter(row => row.calcnamestd === "TOTAL_PCT_OF_TOTAL" && !row.parent && !row.parentsectorname) ?? [];
+  const asOf = isoDate(totals[0]?.asofdate ?? "");
+  const weights = new Map<string, number>();
+  for (const row of totals) {
+    const name = kind === "country" ? row.brkdwnname : row.sectorname;
+    const weight = Number(row.brkdwnpctstd) / 100;
+    if (!name || !row.brkdwnpctstd?.trim() || !Number.isFinite(weight) || weight < 0 || weight > 1
+      || weights.has(name) || isoDate(row.asofdate) !== asOf) {
+      throw new Error(`Invalid Franklin Templeton ${kind} allocation`);
+    }
+    weights.set(name, weight);
+  }
+  const total = Array.from(weights.values()).reduce((sum, weight) => sum + weight, 0);
+  if (weights.size < 5 || Math.abs(total - 1) > 0.002 || Date.parse(asOf) > Date.now() + 86400000) {
+    throw new Error(`Incomplete Franklin Templeton ${kind} allocation`);
+  }
+  return { weights, asOf, total };
+}
+
+export function parseFranklinComposition(payload: unknown): FundComposition {
+  const response = payload as { errors?: unknown[]; data?: { Portfolio?: {
+    fundname?: string;
+    portfolio?: { dailyholdings?: FranklinHolding[]; countryallocation?: FranklinAllocation[]; sectorallocation?: FranklinAllocation[] };
+  } } };
+  const fund = response?.data?.Portfolio;
+  const data = fund?.portfolio;
+  if (response?.errors?.length || fund?.fundname !== "Franklin FTSE Asia ex Japan ETF" || !Array.isArray(data?.dailyholdings)) {
+    throw new Error("Invalid Franklin Templeton FLAX holdings");
+  }
+  const asOf = isoDate(data.dailyholdings[0]?.asofdate ?? "");
+  const equity = new Set(["COMMON STOCK", "FOREIGN STOCK", "PREFERRED STOCK"]);
+  const holdings = data.dailyholdings.filter(row => equity.has(row.assetclasscatg)).map(row => {
+    if (isoDate(row.asofdate) !== asOf) throw new Error("Mixed FLAX holding dates");
+    const isin = /^[A-Z]{2}[A-Z0-9]{10}$/.test(row.isinsecnbr) ? row.isinsecnbr : undefined;
+    return {
+      symbol: row.secticker && row.secticker !== "—" ? row.secticker : isin ?? "",
+      name: row.secname,
+      country: "",
+      isin,
+      weight: row.pctofnetassetsstd?.trim() ? Number(row.pctofnetassetsstd) / 100 : NaN,
+      sector: HOLDING_SECTORS.get(row.sctrname),
+    };
+  }).filter(holding => holding.weight !== 0);
+  const composition = validateComposition(holdings, asOf, "Franklin Templeton");
+  const countries = franklinMix(data.countryallocation, "country");
+  const cashWeight = countries.weights.get(FRANKLIN_CASH) ?? 0;
+  countries.weights.delete(FRANKLIN_CASH);
+  const sectors = franklinMix(data.sectorallocation, "sector");
+  const sectorWeights: Record<string, number> = {};
+  for (const [name, weight] of Array.from(sectors.weights)) {
+    const key = name === FRANKLIN_CASH ? "Cash & Equivalents" : HOLDING_SECTORS.get(name) ?? "Other";
+    sectorWeights[key] = (sectorWeights[key] ?? 0) + weight / Math.max(1, sectors.total);
+  }
+  return {
+    ...composition,
+    sectorAllocation: { asOf: sectors.asOf, weights: sectorWeights },
+    geography: {
+      basis: "issuer-allocation", asOf: countries.asOf, cashWeight,
+      countries: Array.from(countries.weights, ([country, weight]) => ({ country, weight })),
+    },
+  };
+}
+
+async function fetchFranklinComposition() {
+  // This is the public data service used by Franklin Templeton's FLAX fund page.
+  const query = `query Holdings($productId: String!, $countryCode: String!, $languageCode: String!) {
+    Portfolio(fundid: $productId, countrycode: $countryCode, languagecode: $languageCode) {
+      fundname
+      portfolio {
+        dailyholdings { asofdate secticker isinsecnbr secname sctrname pctofnetassetsstd assetclasscatg }
+        countryallocation { asofdate brkdwnname brkdwnpctstd calcnamestd parent }
+        sectorallocation { asofdate sectorname brkdwnpctstd calcnamestd parentsectorname }
+      }
+    }
+  }`;
+  const response = await fetch("https://www.franklintempleton.com/api/pds/price-and-performance?op=Holdings", {
+    method: "POST",
+    headers: { ...HEADERS, "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ query, operationName: "Holdings", variables: { productId: "26346", countryCode: "US", languageCode: "en_US" } }),
+    cache: "no-store",
+    signal: AbortSignal.timeout(12000),
+  });
+  if (!response.ok) throw new Error(`Franklin Templeton returned ${response.status}`);
+  return parseFranklinComposition(await response.json());
+}
+
 const ISHARES: Record<string, string> = {
   USMV: "239695/ishares-msci-usa-minimum-volatility-etf",
   IDEV: "286762/ishares-core-msci-international-developed-markets-etf",
 };
 
 export async function fetchFundComposition(ticker: string): Promise<FundComposition> {
+  if (ticker === "FLAX") return fetchFranklinComposition();
   if (ticker === "VOO") {
     const [payload, scope, sectorCsv] = await Promise.all([
       get("https://investor.vanguard.com/irr/funds/profile/VOO-AdditionalFundData").then(response => response.json()),

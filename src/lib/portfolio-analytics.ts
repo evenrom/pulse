@@ -1,13 +1,16 @@
 import { calculateAssetMetrics, calculateHoldings, type Transaction } from "./finance";
+import type { SectorAllocation } from "./sector-allocation";
 
 export type DailyPrice = { date: string; close: number; adjustedClose: number };
 export type PriceHistory = { prices: DailyPrice[]; requestedFrom: string; splitDates: string[] };
-export type FundHolding = { symbol: string; name: string; country: string; weight: number; sector?: string };
+export type FundHolding = { symbol: string; name: string; country: string; weight: number; sector?: string; isin?: string };
 export type FundComposition = {
   holdings: FundHolding[]; asOf: string; source: string; equityWeight: number;
   nonEquityWeight?: number;
   sectorSource?: "issuer" | "ivv" | null;
-  geography?: { basis: "holdings" | "fund-scope" | "unavailable"; country?: string; asOf?: string };
+  geography?: { basis: "holdings" | "fund-scope" | "unavailable"; country?: string; asOf?: string }
+    | { basis: "issuer-allocation"; asOf: string; countries: { country: string; weight: number }[]; cashWeight: number };
+  sectorAllocation?: { weights: Record<string, number>; asOf: string };
 };
 export type FundProfitPoint = { date: string; usd: number | null; ils: number | null };
 export type RiskContribution = {
@@ -30,6 +33,7 @@ export type PortfolioAnalytics = {
   risk: RiskContribution;
   exposure: CompanyExposure;
   sectorCompanies: SectorCompanyExposure;
+  flaxSectorAllocation: SectorAllocation | null;
   regional: import("./allocation").RegionalAllocation;
   warnings: string[];
 };
@@ -105,6 +109,7 @@ export function calculateRiskContribution(assets: { ticker: string; value: numbe
 }
 
 function companyId(holding: FundHolding) {
+  if (!holding.country && holding.isin) return holding.isin;
   const symbol = holding.symbol.toUpperCase().replace(/[ ./-]/g, "");
   // Explicit issuer aliases avoid merging unrelated symbols on different national exchanges.
   const aliases: Record<string, string> = { GOOG: "ALPHABET", GOOGL: "ALPHABET", BRKA: "BERKSHIRE", BRKB: "BERKSHIRE", FOX: "FOX", FOXA: "FOX", NWS: "NEWS", NWSA: "NEWS" };

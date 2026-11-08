@@ -52,9 +52,24 @@ export async function GET(request: Request) {
     });
     const risk = calculateRiskContribution(values, histories);
     const regional = aggregateRegionalAllocation(values, compositions);
-    regional.sources = exposure.sources.map(source => ({ ...source, basis: compositions.get(source.ticker)?.geography?.basis || (source.source === "iShares" ? "holdings" : "unavailable") }));
+    regional.sources = exposure.sources.map(source => {
+      const geography = compositions.get(source.ticker)?.geography;
+      return {
+        ...source,
+        asOf: geography?.asOf ?? source.asOf,
+        basis: geography?.basis ?? (source.source === "iShares" ? "holdings" : "unavailable"),
+      };
+    });
+    const flaxMix = compositions.get("FLAX")?.sectorAllocation;
+    const flaxSource = exposure.sources.find(source => source.ticker === "FLAX");
+    const flaxSectorAllocation = flaxMix && flaxSource ? {
+      ...flaxMix,
+      source: "franklin" as const,
+      lastRefreshed: flaxSource.refreshedAt,
+      isStale: flaxSource.stale,
+    } : null;
     if (active.some(asset => !(Number(asset.current_price) > 0))) { risk.rows = []; risk.annualizedPortfolioVolatility = null; risk.reason = "Current prices are missing for one or more holdings."; }
-    return NextResponse.json({ funds, risk, exposure, sectorCompanies, regional, warnings } satisfies PortfolioAnalytics, { headers });
+    return NextResponse.json({ funds, risk, exposure, sectorCompanies, flaxSectorAllocation, regional, warnings } satisfies PortfolioAnalytics, { headers });
   } catch (error) {
     console.error("Portfolio analytics error:", error);
     return NextResponse.json({ error: "Analytics are temporarily unavailable. Your portfolio is still available." }, { status: 503, headers });
