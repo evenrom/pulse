@@ -6,7 +6,6 @@ import type { SectorCompanyExposure } from "@/lib/portfolio-analytics";
 import type { SectorAllocation } from "@/lib/sector-allocation";
 
 type Asset = { ticker: string; quantity: number; value_usd: number; sector_allocation: SectorAllocation };
-const SOURCE_LABELS = { yahoo: "Yahoo Finance", franklin: "Franklin Templeton", custom: "Custom asset classification", fallback: "Configured fallback", unclassified: "Unclassified" };
 
 export function SectorEngineAllocation({ assets, companies, loading, failedTickers = [] }: {
   assets: Asset[];
@@ -27,7 +26,7 @@ export function SectorEngineAllocation({ assets, companies, loading, failedTicke
 
   return <section className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
     <div className="px-5 pb-2 pt-5 sm:px-6"><h3 className="text-lg font-semibold text-white">Sector &amp; Engine Allocation</h3><p className="mt-1 text-xs text-slate-400">Share of your entire portfolio</p>
-      {(fallback.length > 0 || stale.length > 0 || failedTickers.length > 0) && <p className="mt-2 text-xs text-amber-400">{fallback.length > 0 ? `${fallback.length} configured sector ${fallback.length === 1 ? "mix" : "mixes"}` : "Sector refresh overdue"} · Details below</p>}
+      {(fallback.length > 0 || stale.length > 0 || failedTickers.length > 0) && <p className="mt-2 text-xs text-amber-400">{fallback.length > 0 ? `${fallback.length} configured sector ${fallback.length === 1 ? "mix" : "mixes"}` : "Sector refresh overdue"}</p>}
     </div>
     <div className="px-5 py-3 sm:px-6">
       {!engines.length ? <p className="py-8 text-sm text-slate-400">No active holdings.</p> : <>
@@ -59,18 +58,5 @@ export function SectorEngineAllocation({ assets, companies, loading, failedTicke
         </div>}
       </>}
     </div>
-    <details className="mt-auto border-t border-slate-800 px-5 py-3 text-xs leading-relaxed text-slate-400 sm:px-6">
-      <summary className="cursor-pointer">Data sources &amp; methodology</summary>
-      <div className="mt-3 space-y-3">
-        <p>Engine, sector and stock percentages are shares of the entire portfolio, including SGOV and IAU. Select a sector to see up to five companies ranked by combined exposure across your funds.</p>
-        <p>Stock weights come from issuer holdings. iShares supplies sector labels in its holdings files. For VOO, sector labels are matched to IVV holdings by ticker. Franklin Templeton supplies FLAX sector totals separately from its holdings. Stock rankings use holdings with a sector label.</p>
-        <p>SGOV is shown as T-Bills and IAU as Gold. Other funds’ cash residuals remain Cash &amp; Equivalents under Other; they are not labeled as Treasury bills. These are composition categories, not risk or safety ratings.</p>
-        {fallback.length > 0 && <p className="text-amber-400">Configured fallbacks: {fallback.map(asset => asset.ticker).join(", ")}. Live sector weights are unavailable for these funds.</p>}
-        {stale.length > 0 && <p className="text-amber-400">Refresh overdue: {stale.map(asset => asset.ticker).join(", ")}. Last valid weights retained.</p>}
-        {failedTickers.length > 0 && <p className="text-amber-400">Latest refresh failed: {failedTickers.join(", ")}. Previous data retained.</p>}
-        <ul className="space-y-2">{active.map(asset => <li key={asset.ticker}><span className="font-medium text-slate-200">{asset.ticker}</span> · {SOURCE_LABELS[asset.sector_allocation?.source || "unclassified"]}{asset.sector_allocation?.asOf ? ` · As of ${asset.sector_allocation.asOf}` : ""}{asset.sector_allocation?.lastRefreshed ? ` · Retrieved ${asset.sector_allocation.lastRefreshed.slice(0, 10)}` : ""}</li>)}</ul>
-        <p>Equity sector weights refresh weekly during market sync. Retrieval dates are not the fund reporting dates. Any unclassified balance remains visible under Other.</p>
-      </div>
-    </details>
   </section>;
 }
