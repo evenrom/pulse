@@ -2,7 +2,6 @@
  * Not an SRRI/PRIIPs rating: Pulse uses one year of daily USD returns, not five years of weekly returns.
  * Colors deliberately differ from profit/loss green/red.
  */
-export const VOLATILITY_SOURCE = "https://www.esma.europa.eu/sites/default/files/library/2015/11/10_673.pdf";
 export const VOLATILITY_BANDS = [
   { key: "low", label: "Low", min: 0, max: 5, color: "#38bdf8", textClass: "text-sky-300", barClass: "bg-sky-400", range: "<5%" },
   { key: "medium", label: "Medium", min: 5, max: 15, color: "#fbbf24", textClass: "text-amber-300", barClass: "bg-amber-400", range: "5–<15%" },

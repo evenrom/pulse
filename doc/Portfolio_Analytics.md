@@ -14,21 +14,19 @@ The main Portfolio Profit chart remains the primary view. Its periods are `1M`, 
 
 ## Volatility contribution
 
-- Home displays a full-width Risk & Return scatter plot. Cumulative USD profit comes from the existing Assets calculation and is signed/color-coded independently of volatility in the selected-point details. Exact weights and contribution figures remain in the collapsed drawer.
+- Home displays a full-width Risk & Return scatter plot. Cumulative USD profit comes from the existing Assets calculation and is signed/color-coded independently of volatility in the selected-point details.
 - Each fund's annualized volatility is its sample standard deviation of the shared daily adjusted returns multiplied by `sqrt(252)`, expressed as a percentage.
-- Total Portfolio uses the same annualization of the current-weighted daily portfolio return series, incorporating covariances. Its cumulative profit comes from the whole portfolio USD profit divided by Net Invested; it has no relative-impact figure. Valid zero portfolio volatility remains zero, with undefined contribution ratios left blank.
+- The Portfolio point uses the same annualization of the current-weighted daily portfolio return series, incorporating covariances. Its cumulative profit comes from the whole portfolio USD profit divided by Net Invested.
 - One shared display classifier applies to both funds and portfolio: Low below 5%, Medium from 5% to below 15%, High from 15%. These group boundaries in the historical CESR/10-673 Box 2 grid; they are Pulse display conventions, not an official SRRI/PRIIPs rating, universal standard, personal suitability assessment, or safety claim. Source: https://www.esma.europa.eu/sites/default/files/library/2015/11/10_673.pdf. Pulse uses daily returns in a trailing-year window, unlike that historical methodology's five-year weekly/monthly sample.
 - Blue/amber/purple volatility colors are independent of green/red profit/loss colors. Classification uses unrounded observations; display avoids rounding a value below a band boundary up to that boundary.
-- The scatter plot maps annualized volatility to cumulative profit, retains a zero-profit line and exact observation positions, and supports hover, click and keyboard selection. Fund circles approximate current weight; a diamond identifies the portfolio. Labels may move to reduce overlap. The compact subtitle identifies all-time profit versus 1Y volatility; the drawer explains the different horizons and the absence of any efficiency or investment ranking. Visible axis titles are enlarged and simplified to Profit (%) and Volatility (%).
-- Relative impact combines the two weights into `volatility contribution / portfolio weight`. `1x` means the portfolio-average contribution per invested dollar. Negative contributions appear as "Offsets", with the signed multiplier available in the drawer. This is not the fund's own volatility or a probability of loss; a high multiplier need not be the largest absolute portfolio contribution.
-- Cumulative profit and the one-year risk sample have different horizons; no return-to-risk score is calculated from these unlike periods. Methodology and exact weight figures are in the collapsed drawer.
+- The scatter plot maps annualized volatility to cumulative profit and supports hover, click and keyboard selection. Fund circles approximate current weight. A diamond identifies the portfolio, and keyboard focus uses a ring around the marker. The subtitle identifies the different time horizons.
 
 - Uses current market-value weights and the last calendar year's dividend-adjusted daily USD returns.
 - Aligns matching start/end dates of daily return intervals across **all** active funds. Missing observations are not zero-filled; missing funds are not dropped and weights are not renormalized around them.
 - Requires at least 126 shared returns and a shared closing date no older than seven calendar days.
 - For portfolio return `p = sum(w_i * r_i)`, contribution is `100 * w_i * Cov(r_i, p) / Var(p)`.
 - Contributions reconcile to 100% before display rounding. They may be negative or exceed 100% when other funds offset volatility. These are retrospective estimates for today's allocation, not historical account-value changes or forecasts.
-- The risk sample is independent of the profit date filter and currency toggle and is explicitly labeled in USD with its sample dates.
+- The USD risk sample is independent of the profit date filter and currency toggle.
 
 ## Companies
 

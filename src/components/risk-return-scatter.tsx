@@ -106,8 +106,9 @@ export function RiskReturnScatter({ points }: { points: RiskReturnPoint[] }) {
           const label = plot.labels.get(point.id)!;
           const active = point.id === selected?.id;
           const description = `${point.name}: cumulative profit ${signed(point.profitPct)}, annualized volatility ${formatVolatility(point.volatility)}, ${band.label}${point.isPortfolio ? "" : `, portfolio weight ${point.weight.toFixed(1)}%`}`;
-          return <g key={point.id} role="button" tabIndex={0} aria-label={description} aria-pressed={active} className="cursor-pointer" onMouseEnter={() => setSelectedId(point.id)} onFocus={() => setSelectedId(point.id)} onClick={() => setSelectedId(point.id)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedId(point.id); } }}>
+          return <g key={point.id} role="button" tabIndex={0} aria-label={description} aria-pressed={active} className="group cursor-pointer focus:outline-none" onMouseEnter={() => setSelectedId(point.id)} onFocus={() => setSelectedId(point.id)} onClick={() => setSelectedId(point.id)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedId(point.id); } }}>
             <title>{description}</title>
+            <circle cx={point.x} cy={point.y} r={point.radius + 8} fill="none" strokeWidth={2} className="pointer-events-none stroke-accent opacity-0 group-focus-visible:opacity-100" aria-hidden="true" />
             <line x1={point.x} y1={point.y} x2={Math.max(label.x, Math.min(label.x + label.width, point.x))} y2={label.y - 5} stroke="var(--chart-zero)" opacity={0.65} pointerEvents="none" />
             {point.isPortfolio ? <path d={`M ${point.x} ${point.y - 8} l 8 8 l -8 8 l -8 -8 Z`} fill={band.color} stroke="white" strokeWidth={2} /> : <circle cx={point.x} cy={point.y} r={point.radius} fill={band.color} fillOpacity={active ? 1 : 0.8} stroke={active ? "white" : "var(--chart-well)"} strokeWidth={1.5} />}
             <text x={label.x} y={label.y} fill={point.isPortfolio ? "#ffffff" : "var(--chart-label)"} fontSize={14} fontWeight={point.isPortfolio ? 600 : 400}>{point.name}</text>
