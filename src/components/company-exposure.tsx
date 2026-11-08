@@ -8,10 +8,16 @@ export function CompanyExposure({ data, loading, error }: { data: Exposure | nul
   const companies = data?.companies.slice(0, expanded ? 20 : 10) || [];
   const topWeight = companies.reduce((sum, row) => sum + row.weight, 0);
   const partial = Boolean(data?.missingTickers.length);
-  return <section className="mt-6 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900">
-    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800 p-6">
-      <div><h3 className="text-lg font-semibold text-white">Companies you own</h3><p className="mt-1 text-sm text-slate-400">Largest underlying company exposures · % of your entire portfolio</p></div>
-      {data && data.companies.length > 10 && <button type="button" aria-expanded={expanded} aria-controls="company-exposure-table" onClick={() => setExpanded(value => !value)} className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">{expanded ? "Show 10" : "Show 20"}</button>}
+  return <details
+    className="mt-6 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900"
+    onToggle={event => { if (!event.currentTarget.open) setExpanded(false); }}
+  >
+    <summary className="cursor-pointer px-6 py-5 text-lg text-white hover:bg-slate-800/50 focus-visible:outline-offset-[-3px]">
+      <h3 className="inline font-semibold">Companies you own</h3>
+    </summary>
+    <div className="flex flex-wrap items-center justify-between gap-3 border-y border-slate-800 px-6 py-4">
+      <p className="text-sm text-slate-400">Largest underlying company exposures · % of your entire portfolio</p>
+      {!error && data && data.companies.length > 10 && <button type="button" aria-expanded={expanded} aria-controls="company-exposure-table" onClick={() => setExpanded(value => !value)} className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">{expanded ? "Show 10" : "Show 20"}</button>}
     </div>
     {loading && !data ? <p role="status" className="p-6 text-sm text-slate-400">Loading full fund holdings…</p> : error || !companies.length ? <p role="status" className="p-6 text-sm text-slate-400">{error || "Company holdings are not available yet. They refresh automatically with market sync."}</p> : <>
       {partial && <p className="px-6 pt-4 text-sm text-amber-400">Partial ranking: holdings unavailable for {data!.missingTickers.join(", ")}. These funds are included in the portfolio denominator.</p>}
@@ -30,5 +36,5 @@ export function CompanyExposure({ data, loading, error }: { data: Exposure | nul
       {data.sources.map(source => <p key={source.ticker} className={source.stale ? "mt-1 text-amber-400" : "mt-1"}>{source.ticker} · {source.source} · Holdings as of {source.asOf} · Retrieved {source.refreshedAt.slice(0, 10)}{source.stale ? " · Refresh overdue; showing last valid data" : ""}</p>)}
       </div>
     </details>}
-  </section>;
+  </details>;
 }
