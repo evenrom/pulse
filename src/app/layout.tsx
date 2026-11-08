@@ -16,6 +16,9 @@ const geistMono = localFont({
 export const metadata: Metadata = {
   title: "Pulse Terminal",
   description: "Advanced Portfolio Analytics Terminal",
+  icons: {
+    apple: [{ url: "/pwa/pulse-v2-180.png", sizes: "180x180", type: "image/png" }],
+  },
   appleWebApp: {
     title: "Pulse Terminal",
     capable: true,
