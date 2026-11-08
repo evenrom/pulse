@@ -1,34 +1,50 @@
-* {
-  /* מונע את הפלאש/הצבע האפור או הלבן בלחיצה במובייל */
-  -webkit-tap-highlight-color: transparent;
-}
-
-*:focus {
-  /* מונע ריבועי פוקוס לבנים או כחולים סביב כפתורים ואלמנטים */
-  outline: none !important;
-  box-shadow: none !important;
-}
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  color-scheme: dark;
+  --background: #0a1215;
+  --foreground: #f3f9f8;
+  --chart-well: #0d181c;
+  --chart-grid: #2b4147;
+  --chart-zero: #93aaae;
+  --chart-tick: #a8bbbf;
+  --chart-label: #e6f2f1;
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  background-image: radial-gradient(ellipse 48rem 22rem at 50% 0%, #102529, transparent);
+  background-repeat: no-repeat;
+}
+
+@layer base {
+  :where(button, input, select, summary, a[href], [role="button"]):focus-visible {
+    outline: 2px solid theme("colors.accent.DEFAULT");
+    outline-offset: 3px;
+  }
+}
+
+@layer components {
+  .pulse-selection {
+    @apply bg-accent/10 text-accent-bright ring-1 ring-inset ring-accent/25;
+  }
+
+  .pulse-metric {
+    background-image: radial-gradient(ellipse at 100% 0%, rgb(103 232 231 / 9%), transparent 75%);
+  }
+
+  .pulse-chart {
+    @apply rounded-xl border border-slate-800/80;
+    background-color: var(--chart-well);
+  }
+
+  .sector-segment:focus-visible {
+    outline-offset: -2px;
+    outline-color: theme("colors.slate.50");
+  }
 }
 
 @layer utilities {

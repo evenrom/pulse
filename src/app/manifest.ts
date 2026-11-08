@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: 'Advanced Portfolio Analytics Terminal',
     start_url: '/',
     display: 'standalone',
-    background_color: '#070d1f',
-    theme_color: '#070d1f',
+    background_color: '#0a1215',
+    theme_color: '#0a1215',
     icons: [
       {
         src: '/icon.svg',

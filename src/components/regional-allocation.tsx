@@ -34,11 +34,11 @@ export function RegionalAllocation({ data, loading, error }: { data: RegionalDat
           return <div key={region.name}>
             <button type="button" aria-expanded={open} aria-controls={`region-countries-${index}`} onClick={() => toggle(region.name)} className="block w-full text-left">
               <span className="mb-2 flex items-center justify-between gap-3 text-sm"><span className="font-semibold text-slate-100"><span className="mr-1 inline-block w-3 text-slate-500" aria-hidden="true">{open ? "⌄" : "›"}</span>{region.name}</span><span className="font-semibold tabular-nums text-white">{percent(region.pct)}</span></span>
-              <span className="block h-4 overflow-hidden rounded bg-slate-800/70"><span className={`block h-full rounded ${open ? "bg-blue-400" : "bg-blue-400/80"}`} style={{ width: `${region.pct / maximum * 100}%` }} /></span>
+              <span className="block h-4 overflow-hidden rounded bg-slate-950"><span className={`block h-full rounded ${open ? "bg-accent" : "bg-accent/80"}`} style={{ width: `${region.pct / maximum * 100}%` }} /></span>
             </button>
             {open && <div id={`region-countries-${index}`} className="ml-2 mt-3 space-y-3 border-l border-slate-700 pl-3">{region.countries.slice(0, showAllCountries.has(region.name) ? undefined : 5).map(country => <button key={country.name} type="button" onClick={() => setSelectedCountry(country.name)} aria-pressed={selected?.name === country.name} className="block w-full text-left">
               <span className="mb-1 flex items-baseline justify-between gap-3 text-xs"><span className={selected?.name === country.name ? "text-white underline underline-offset-2" : "text-slate-300"}>{country.name}</span><span className="tabular-nums text-slate-300">{percent(country.pct)}</span></span>
-              <span className="block h-1.5 rounded bg-slate-800/70"><span className="block h-full rounded bg-blue-300" style={{ width: `${country.pct / maximum * 100}%` }} /></span>
+              <span className="block h-1.5 rounded bg-slate-950"><span className="block h-full rounded bg-accent-bright" style={{ width: `${country.pct / maximum * 100}%` }} /></span>
             </button>)}{region.countries.length > 5 && <button type="button" className="text-xs text-sky-300 hover:underline" onClick={() => setShowAllCountries(previous => { const next = new Set(previous); if (next.has(region.name)) next.delete(region.name); else next.add(region.name); return next; })}>{showAllCountries.has(region.name) ? "Show top 5 countries" : `Show all ${region.countries.length} countries`}</button>}</div>}
           </div>;
         })}</div>

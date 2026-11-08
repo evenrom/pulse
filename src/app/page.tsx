@@ -335,8 +335,8 @@ export default function Home() {
       <div className="flex items-center justify-center min-h-[calc(100vh-4rem)] p-6">
         <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden p-8">
           <div className="flex flex-col items-center justify-center mb-8">
-            <div className="h-16 w-16 bg-blue-500/10 rounded-full flex items-center justify-center mb-4">
-              <Lock className="w-8 h-8 text-blue-500" />
+            <div className="h-16 w-16 bg-accent/10 rounded-full flex items-center justify-center mb-4">
+              <Lock className="w-8 h-8 text-accent" />
             </div>
             <h1 className="text-2xl font-bold text-white tracking-tight">Access Terminal</h1>
             <p className="text-slate-400 mt-2 text-sm text-center">Enter your secure PIN to view your portfolio.</p>
@@ -349,7 +349,7 @@ export default function Home() {
                 value={pin}
                 onChange={(e) => setPin(e.target.value)}
                 placeholder="Enter PIN"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all text-center tracking-widest text-lg"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white placeholder:text-slate-500 focus:border-accent transition-all text-center tracking-widest text-lg"
                 autoFocus
               />
             </div>
@@ -364,10 +364,10 @@ export default function Home() {
             <button
               type="submit"
               disabled={isLoading || pin.length === 0}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-accent hover:bg-accent-bright text-accent-ink font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
-                <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div className="h-5 w-5 border-2 border-accent-ink/30 border-t-accent-ink rounded-full animate-spin" />
               ) : (
                 <>
                   <span>Unlock</span>
@@ -401,7 +401,7 @@ export default function Home() {
       <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-2">
-            <Activity className="w-8 h-8 text-blue-500" />
+            <Activity className="w-8 h-8 text-accent" />
             Pulse
           </h1>
           <p className="text-slate-400 mt-1">Portfolio</p>
@@ -417,17 +417,19 @@ export default function Home() {
           </div>
           <div className="bg-slate-900 border border-slate-800 rounded-lg p-1 flex">
             <button
+              aria-pressed={currency === "usd"}
               onClick={() => setCurrency("usd")}
               className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                currency === "usd" ? "bg-slate-800 text-white" : "text-slate-400 hover:text-slate-300"
+                currency === "usd" ? "pulse-selection" : "text-slate-400 hover:text-slate-300"
               }`}
             >
               USD
             </button>
             <button
+              aria-pressed={currency === "ils"}
               onClick={() => setCurrency("ils")}
               className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                currency === "ils" ? "bg-slate-800 text-white" : "text-slate-400 hover:text-slate-300"
+                currency === "ils" ? "pulse-selection" : "text-slate-400 hover:text-slate-300"
               }`}
             >
               ILS
@@ -465,12 +467,12 @@ export default function Home() {
 
       {activeTab === "dashboard" && currentMetrics && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-8">
-          <div className="col-span-2 bg-slate-900 border border-slate-800 rounded-xl md:rounded-2xl p-4 md:p-5 min-w-0">
+          <div className="pulse-metric col-span-2 bg-slate-900 border border-slate-700 rounded-xl md:rounded-2xl p-4 md:p-5 min-w-0">
             <p className="text-xs md:text-sm text-slate-400 mb-2">Total Profit</p>
-            <p className={`text-2xl md:text-3xl font-bold tracking-tight ${currentMetrics.netProfit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+            <p className={`text-3xl md:text-4xl font-bold tracking-tight ${currentMetrics.netProfit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
               {currentMetrics.netProfit > 0 ? "+" : ""}{formatCurrency(currentMetrics.netProfit, currency)}
             </p>
-            <div className="flex items-center gap-4 mt-2 text-xs md:text-sm">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs md:text-sm">
               <span className={currentMetrics.netProfit >= 0 ? "text-emerald-400" : "text-red-400"}>{totalReturnPct >= 0 ? "+" : ""}{totalReturnPct.toFixed(1)}%</span>
               <span className="text-slate-500">Dividends: {formatCurrency(currentMetrics.totalDrip, currency)}</span>
             </div>
@@ -488,7 +490,7 @@ export default function Home() {
       )}
 
       {activeTab === "dashboard" && portfolioData && (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-8">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-8">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
             <div>
               <h3 className="text-white font-semibold text-lg">Portfolio Profit</h3>
@@ -498,10 +500,11 @@ export default function Home() {
               {(["1M", "1Q", "1Y", "ALL"] as const).map(filter => (
                 <button
                   key={filter}
+                  aria-pressed={historyFilter === filter}
                   onClick={() => setHistoryFilter(filter)}
                   className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                     historyFilter === filter
-                      ? "bg-slate-800 text-white"
+                      ? "pulse-selection"
                       : "text-slate-400 hover:text-slate-300"
                   }`}
                 >
@@ -510,16 +513,22 @@ export default function Home() {
               ))}
             </div>
           </div>
-          {filteredHistory.length > 0 ? <div className="h-64 w-full">
+          {filteredHistory.length > 0 ? <div className="pulse-chart h-64 min-w-0 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={filteredHistory}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+              <AreaChart data={filteredHistory} margin={{ top: 14, right: 12, bottom: 14, left: 12 }}>
+                <defs>
+                  <linearGradient id="portfolio-profit-fill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#67e8e7" stopOpacity={0.27} />
+                    <stop offset="100%" stopColor="#67e8e7" stopOpacity={0.05} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} />
                 <XAxis hide dataKey="formattedDate" />
                 <YAxis
                   hide
                   domain={[-maxAbsReturn, maxAbsReturn]}
                 />
-                <ReferenceLine y={0} stroke="#64748b" strokeWidth={1.5} />
+                <ReferenceLine y={0} stroke="var(--chart-zero)" strokeWidth={1.5} />
                 <Tooltip
                   content={({ active, payload, label }: { active?: boolean, payload?: readonly unknown[], label?: string | number }) => {
                     if (active && payload && payload.length) {
@@ -541,11 +550,11 @@ export default function Home() {
                 <Area
                   type="monotone"
                   dataKey="return_pct"
-                  stroke="#8eabff"
-                  fillOpacity={0.2}
-                  fill="#8eabff"
+                  stroke="#67e8e7"
+                  strokeWidth={2}
+                  fill="url(#portfolio-profit-fill)"
                   baseValue={0}
-                  activeDot={{ r: 6, fill: "#8eabff", stroke: "#0f172a", strokeWidth: 2 }}
+                  activeDot={{ r: 6, fill: "#67e8e7", stroke: "var(--chart-well)", strokeWidth: 2 }}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -678,12 +687,12 @@ export default function Home() {
                 value={transactionSearch}
                 onChange={(event) => setTransactionSearch(event.target.value)}
                 placeholder="Ticker"
-                className="w-28 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-blue-500"
+                className="w-28 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-accent"
               />
               <select
                 value={transactionAction}
                 onChange={(event) => setTransactionAction(event.target.value as "ALL" | "BUY" | "SELL" | "DRIP")}
-                className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500"
+                className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:border-accent"
               >
                 <option value="ALL">All</option>
                 <option value="BUY">Buy</option>
@@ -700,7 +709,7 @@ export default function Home() {
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-white">{tx.ticker}</span>
-                    <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${tx.action === "BUY" ? "bg-blue-500/10 text-blue-400" : tx.action === "SELL" ? "bg-amber-500/10 text-amber-400" : "bg-emerald-500/10 text-emerald-400"}`}>{tx.action}</span>
+                    <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${tx.action === "BUY" ? "bg-accent/10 text-accent" : tx.action === "SELL" ? "bg-amber-500/10 text-amber-400" : "bg-emerald-500/10 text-emerald-400"}`}>{tx.action}</span>
                   </div>
                   <span className="text-xs text-slate-500">{tx.date ? new Date(tx.date).toLocaleDateString() : "—"}</span>
                 </div>
@@ -736,7 +745,7 @@ export default function Home() {
                     <td className="px-5 py-4 font-semibold text-white">{tx.ticker || "—"}</td>
                     <td className="px-5 py-4">
                       <span className={`px-2 py-1 rounded-md text-xs font-semibold ${
-                        tx.action === "BUY" ? "bg-blue-500/10 text-blue-400" :
+                        tx.action === "BUY" ? "bg-accent/10 text-accent" :
                         tx.action === "SELL" ? "bg-amber-500/10 text-amber-400" :
                         "bg-emerald-500/10 text-emerald-400"
                       }`}>{tx.action}</span>
@@ -783,7 +792,7 @@ export default function Home() {
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden p-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
-              <Calculator className="w-5 h-5 text-blue-400" />
+              <Calculator className="w-5 h-5 text-accent" />
               Rebalance
             </h2>
           </div>
@@ -793,7 +802,7 @@ export default function Home() {
               type="number"
               value={newCapital}
               onChange={(e) => setNewCapital(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:border-accent transition-colors"
               placeholder="e.g. 10000"
             />
           </div>
@@ -816,7 +825,7 @@ export default function Home() {
                   <th className="px-4 py-3 font-medium text-right">Current Weight</th>
                   <th className="px-4 py-3 font-medium text-right w-32">Target (%)</th>
                   <th className="px-4 py-3 font-medium text-right">Drift</th>
-                  <th className="px-4 py-3 font-medium text-right text-blue-400">Amount to Buy</th>
+                  <th className="px-4 py-3 font-medium text-right text-accent">Amount to Buy</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
@@ -857,7 +866,7 @@ export default function Home() {
                               [asset.ticker]: val === "" ? 0 : Number(val)
                             }));
                           }}
-                          className="w-20 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-white text-right focus:outline-none focus:border-blue-500"
+                          className="w-20 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-white text-right focus:border-accent"
                         />
                       </td>
                       <td className={`px-4 py-3 text-right font-medium ${driftTone}`}>{drift >= 0 ? "+" : ""}{drift.toFixed(1)}%</td>
@@ -901,14 +910,14 @@ export default function Home() {
       })()}
 
       {activeTab === "trade" && (
-        <div className="bg-[#0C1326]/90 backdrop-blur-[24px] border border-[rgba(141,169,255,0.1)] rounded-2xl p-4 md:p-8 max-w-5xl mx-auto mb-8">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 md:p-8 max-w-5xl mx-auto mb-8">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h2 className="text-2xl font-bold text-white tracking-tight">Add Transactions</h2>
               <p className="text-slate-400 mt-1 text-sm">Record one purchase or the full month</p>
             </div>
-            <div className="hidden sm:block p-3 bg-[#8EABFF]/10 rounded-xl border border-[#8EABFF]/20">
-               <ArrowRightLeft className="w-6 h-6 text-[#8EABFF]" />
+            <div className="hidden sm:block p-3 bg-accent/10 rounded-xl border border-accent/20">
+               <ArrowRightLeft className="w-6 h-6 text-accent" />
             </div>
           </div>
           
@@ -927,7 +936,7 @@ export default function Home() {
                 required
                 value={tradeDate}
                 onChange={(e) => setTradeDate(e.target.value)}
-                className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-3 py-2.5 text-white focus:border-[#8EABFF]"
+                className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-3 py-2.5 text-white focus:border-accent"
               />
             </div>
 
@@ -969,17 +978,17 @@ export default function Home() {
               })}
             </div>
 
-            <button type="button" disabled={tradeRows.length >= 20} onClick={() => setTradeRows(current => [...current, emptyTradeRow()])} className="flex items-center gap-2 text-sm text-[#8EABFF] hover:text-white disabled:opacity-40">
+            <button type="button" disabled={tradeRows.length >= 20} onClick={() => setTradeRows(current => [...current, emptyTradeRow()])} className="flex items-center gap-2 text-sm text-accent hover:text-white disabled:opacity-40">
               <Plus className="w-4 h-4" /> Add row
             </button>
 
             <button
               type="submit"
               disabled={isTrading}
-              className="w-full bg-[#8EABFF] hover:bg-[#7A99F5] text-[#0C1326] font-bold py-3.5 rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(141,169,255,0.3)] mt-2 font-sans"
+              className="w-full bg-accent hover:bg-accent-bright text-accent-ink font-bold py-3.5 rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed mt-2 font-sans"
             >
               {isTrading ? (
-                <div className="h-5 w-5 border-2 border-[#0C1326]/30 border-t-[#0C1326] rounded-full animate-spin" />
+                <div className="h-5 w-5 border-2 border-accent-ink/30 border-t-accent-ink rounded-full animate-spin" />
               ) : (
                 <>
                   <span>Record {tradeRows.length}</span>
@@ -991,7 +1000,7 @@ export default function Home() {
         </div>
       )}
 
-      <nav className="fixed bottom-0 left-0 w-full h-16 bg-slate-900 border-t border-slate-800 flex items-center justify-around z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.5)] pb-[env(safe-area-inset-bottom)]">
+      <nav className="fixed bottom-0 left-0 w-full h-16 bg-slate-950/95 backdrop-blur-md border-t border-slate-800 flex items-center justify-around z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.24)] pb-[env(safe-area-inset-bottom)]">
         {[
           { id: "dashboard", label: "Home", icon: Activity },
           { id: "holdings", label: "Assets", icon: DollarSign },
@@ -1004,10 +1013,11 @@ export default function Home() {
           return (
             <button
               key={tab.id}
+              aria-current={isActive ? "page" : undefined}
               onClick={() => setActiveTab(tab.id as "dashboard" | "holdings" | "simulate" | "history" | "trade")}
-              className={`flex flex-col items-center justify-center gap-1 text-[11px] sm:text-sm font-medium transition-colors cursor-pointer relative w-full h-full ${isActive ? "text-[#8EABFF]" : "text-slate-400 hover:text-slate-200"}`}
+              className={`flex flex-col items-center justify-center gap-1 text-[11px] sm:text-sm font-medium transition-colors cursor-pointer relative w-full h-full ${isActive ? "text-accent" : "text-slate-400 hover:text-slate-200"}`}
             >
-              <Icon className={`w-5 h-5 ${isActive ? "drop-shadow-[0_0_8px_rgba(141,169,255,0.8)]" : ""}`} />
+              <span className={`flex h-7 w-12 items-center justify-center rounded-lg ${isActive ? "pulse-selection" : ""}`}><Icon className="h-5 w-5" /></span>
               <span>{tab.label}</span>
             </button>
           );

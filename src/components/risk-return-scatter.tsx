@@ -82,7 +82,7 @@ export function RiskReturnScatter({ points }: { points: RiskReturnPoint[] }) {
 
   return <div ref={container} className="min-w-0 px-4 pb-4 sm:px-6">
     {!plot.points.length ? <p className="py-12 text-sm text-slate-400">No comparable profit and volatility observations yet.</p> : <>
-      <svg viewBox={`0 0 ${width} ${plot.height}`} className="block w-full" aria-label="Risk and return chart">
+      <svg viewBox={`0 0 ${width} ${plot.height}`} className="pulse-chart block w-full" aria-label="Risk and return chart">
         {VOLATILITY_BANDS.map(band => {
           const end = Math.min(plot.maxX, band.max);
           return end > band.min ? <rect key={band.key} x={plot.x(band.min)} y={plot.top} width={plot.x(end) - plot.x(band.min)} height={plot.bottom - plot.top} fill={band.color} opacity={0.055} /> : null;
@@ -91,16 +91,16 @@ export function RiskReturnScatter({ points }: { points: RiskReturnPoint[] }) {
           const xValue = plot.maxX * index / 4;
           const yValue = plot.minY + (plot.maxY - plot.minY) * index / 4;
           return <g key={index} aria-hidden="true">
-            <line x1={plot.x(xValue)} x2={plot.x(xValue)} y1={plot.top} y2={plot.bottom} stroke="#334155" strokeDasharray="3 4" />
-            {Math.abs(plot.y(yValue) - plot.y(0)) > 20 && <line x1={plot.left} x2={plot.right} y1={plot.y(yValue)} y2={plot.y(yValue)} stroke="#334155" strokeDasharray="3 4" />}
-            <text x={plot.x(xValue)} y={plot.bottom + 20} textAnchor="middle" fill="#94a3b8" fontSize={12}>{Number(xValue.toFixed(1))}%</text>
-            {Math.abs(plot.y(yValue) - plot.y(0)) > 20 && <text x={plot.left - 7} y={plot.y(yValue) + 4} textAnchor="end" fill="#94a3b8" fontSize={12}>{Number(yValue.toFixed(1))}%</text>}
+            <line x1={plot.x(xValue)} x2={plot.x(xValue)} y1={plot.top} y2={plot.bottom} stroke="var(--chart-grid)" strokeDasharray="3 4" />
+            {Math.abs(plot.y(yValue) - plot.y(0)) > 20 && <line x1={plot.left} x2={plot.right} y1={plot.y(yValue)} y2={plot.y(yValue)} stroke="var(--chart-grid)" strokeDasharray="3 4" />}
+            <text x={plot.x(xValue)} y={plot.bottom + 20} textAnchor="middle" fill="var(--chart-tick)" fontSize={12}>{Number(xValue.toFixed(1))}%</text>
+            {Math.abs(plot.y(yValue) - plot.y(0)) > 20 && <text x={plot.left - 7} y={plot.y(yValue) + 4} textAnchor="end" fill="var(--chart-tick)" fontSize={12}>{Number(yValue.toFixed(1))}%</text>}
           </g>;
         })}
-        <line x1={plot.left} x2={plot.right} y1={plot.y(0)} y2={plot.y(0)} stroke="#cbd5e1" strokeWidth={1.2} />
-        <text x={plot.left - 7} y={plot.y(0) + 4} textAnchor="end" fill="#e2e8f0" fontSize={12}>0%</text>
-        <text x={plot.left} y={18} fill="#e2e8f0" fontSize={14} fontWeight={500}>Profit (%)</text>
-        <text x={(plot.left + plot.right) / 2} y={plot.height - 8} textAnchor="middle" fill="#e2e8f0" fontSize={14} fontWeight={500}>Volatility (%)</text>
+        <line x1={plot.left} x2={plot.right} y1={plot.y(0)} y2={plot.y(0)} stroke="var(--chart-zero)" strokeWidth={1.2} />
+        <text x={plot.left - 7} y={plot.y(0) + 4} textAnchor="end" fill="var(--chart-label)" fontSize={12}>0%</text>
+        <text x={plot.left} y={18} fill="var(--chart-label)" fontSize={14} fontWeight={500}>Profit (%)</text>
+        <text x={(plot.left + plot.right) / 2} y={plot.height - 8} textAnchor="middle" fill="var(--chart-label)" fontSize={14} fontWeight={500}>Volatility (%)</text>
         {plot.points.map(point => {
           const band = classifyVolatility(point.volatility)!;
           const label = plot.labels.get(point.id)!;
@@ -108,18 +108,18 @@ export function RiskReturnScatter({ points }: { points: RiskReturnPoint[] }) {
           const description = `${point.name}: cumulative profit ${signed(point.profitPct)}, annualized volatility ${formatVolatility(point.volatility)}, ${band.label}${point.isPortfolio ? "" : `, portfolio weight ${point.weight.toFixed(1)}%`}`;
           return <g key={point.id} role="button" tabIndex={0} aria-label={description} aria-pressed={active} className="cursor-pointer" onMouseEnter={() => setSelectedId(point.id)} onFocus={() => setSelectedId(point.id)} onClick={() => setSelectedId(point.id)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedId(point.id); } }}>
             <title>{description}</title>
-            <line x1={point.x} y1={point.y} x2={Math.max(label.x, Math.min(label.x + label.width, point.x))} y2={label.y - 5} stroke="#64748b" opacity={0.65} pointerEvents="none" />
-            {point.isPortfolio ? <path d={`M ${point.x} ${point.y - 8} l 8 8 l -8 8 l -8 -8 Z`} fill={band.color} stroke="white" strokeWidth={2} /> : <circle cx={point.x} cy={point.y} r={point.radius} fill={band.color} fillOpacity={active ? 1 : 0.8} stroke={active ? "white" : "#0f172a"} strokeWidth={1.5} />}
-            <text x={label.x} y={label.y} fill={point.isPortfolio ? "#ffffff" : "#cbd5e1"} fontSize={14} fontWeight={point.isPortfolio ? 600 : 400}>{point.name}</text>
+            <line x1={point.x} y1={point.y} x2={Math.max(label.x, Math.min(label.x + label.width, point.x))} y2={label.y - 5} stroke="var(--chart-zero)" opacity={0.65} pointerEvents="none" />
+            {point.isPortfolio ? <path d={`M ${point.x} ${point.y - 8} l 8 8 l -8 8 l -8 -8 Z`} fill={band.color} stroke="white" strokeWidth={2} /> : <circle cx={point.x} cy={point.y} r={point.radius} fill={band.color} fillOpacity={active ? 1 : 0.8} stroke={active ? "white" : "var(--chart-well)"} strokeWidth={1.5} />}
+            <text x={label.x} y={label.y} fill={point.isPortfolio ? "#ffffff" : "var(--chart-label)"} fontSize={14} fontWeight={point.isPortfolio ? 600 : 400}>{point.name}</text>
           </g>;
         })}
         {/* A visual-only overlay keeps the active marker visible without changing keyboard tab order. */}
         {selected && <g pointerEvents="none" aria-hidden="true">
-          <circle cx={selected.x} cy={selected.y} r={selected.radius + 5} fill="none" stroke="#e2e8f0" strokeDasharray="2 3" />
+          <circle cx={selected.x} cy={selected.y} r={selected.radius + 5} fill="none" stroke="var(--chart-label)" strokeDasharray="2 3" />
           {selected.isPortfolio ? <path d={`M ${selected.x} ${selected.y - 8} l 8 8 l -8 8 l -8 -8 Z`} fill={selectedBand?.color} stroke="white" strokeWidth={2} /> : <circle cx={selected.x} cy={selected.y} r={selected.radius} fill={selectedBand?.color} stroke="white" strokeWidth={1.5} />}
         </g>}
       </svg>
-      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-400">{VOLATILITY_BANDS.map(band => <span key={band.key} className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: band.color }} />{band.label} {band.range}</span>)}</div>
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">{VOLATILITY_BANDS.map(band => <span key={band.key} className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: band.color }} />{band.label} {band.range}</span>)}</div>
       {selected && <div className="mt-3 flex min-h-10 flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-slate-950/40 px-3 py-2 text-xs" role="status" aria-live="polite">
         <strong className="text-slate-100">{selected.name}</strong><span className={selected.profitPct > 0 ? "text-emerald-400" : selected.profitPct < 0 ? "text-red-400" : "text-slate-300"}>{signed(selected.profitPct)} profit</span><span className={selectedBand?.textClass}>{formatVolatility(selected.volatility)} · {selectedBand?.label} volatility</span>{!selected.isPortfolio && <span className="text-slate-400">{selected.weight.toFixed(1)}% of portfolio</span>}
       </div>}
